@@ -948,6 +948,43 @@ ul.opportunities-grid{
 .signals-banner h3{ margin-top:0; color:var(--accent-hover); }
 .signals-banner p{ font-size:12.5px; color:var(--text); margin:0; }
 
+/* ---- packages (S-25 redesign) ---- */
+.package-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--space-4); }
+.package-card{ display:flex; flex-direction:column; gap:var(--space-3); }
+.package-card-header{ align-items:flex-start; }
+.package-status-pill{ font-weight:700; text-transform:capitalize; }
+.package-status-pill--draft{ background:var(--accent-soft); color:var(--accent); }
+.package-status-pill--released{ background:#e2f2ea; color:var(--success); }
+
+.package-signal-strip{ margin:0; }
+.package-signal-chip{ background:transparent; border-width:1.5px; font-weight:600; }
+
+.package-columns{ display:grid; grid-template-columns:1fr; gap:var(--space-4); }
+@media (min-width:960px){ .package-columns{ grid-template-columns:1fr 1fr; } }
+
+.package-match-table th{ font-size:11px; color:var(--mute); }
+.package-match-table td{ vertical-align:top; padding:.5em .5em; }
+.package-match-table .opportunity-pill{ margin:0 3px 3px 0; display:inline-block; }
+.package-gap-pill{ opacity:.55; }
+
+.package-fit-bar{ display:flex; align-items:center; gap:6px; min-width:90px; }
+.package-fit-bar-track{ flex:1; height:6px; border-radius:9px; background:var(--surface-2); overflow:hidden; }
+.package-fit-bar-fill{ height:100%; background:var(--accent); border-radius:9px; }
+.package-fit-bar-label{ font-size:11px; color:var(--mute); font-family:"IBM Plex Mono",monospace; }
+
+.package-email-textarea{
+  width:100%; min-height:180px; resize:vertical; border:1px solid var(--border);
+  border-radius:8px; padding:var(--space-3); background:var(--surface-2); color:var(--text);
+  font:13px/1.55 Inter,system-ui; margin-top:var(--space-2);
+}
+.package-email-textarea[readonly]{ opacity:.7; cursor:not-allowed; }
+.package-email-meta{ margin-top:var(--space-2); }
+.package-email-preview{
+  white-space:pre-wrap; background:var(--surface); border:1px solid var(--border); border-radius:8px;
+  padding:var(--space-3); font-size:12.5px; margin-top:var(--space-2);
+}
+.package-actions{ border-top:1px solid var(--border); padding-top:var(--space-3); }
+
 /* ---- scrollbar ---- */
 *::-webkit-scrollbar{ width:11px; height:11px; }
 *::-webkit-scrollbar-track{ background:var(--bg); }

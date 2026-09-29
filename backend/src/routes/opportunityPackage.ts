@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import { logger } from "../logger";
 import { requireAuth } from "../middleware/requireAuth";
 import { composePackage, type ComposedPackageContent } from "../packages/composePackage";
+import { composeEmailDraft } from "../packages/composeEmailDraft";
 import type { OpportunityRow } from "./hiddenDemand";
 
 interface JobOpeningRow {
@@ -28,6 +29,7 @@ interface OpportunityPackageRow {
   status: "draft" | "released";
   released_by: string | null;
   released_at: string | null;
+  draft_email_body: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -43,6 +45,7 @@ function toPackageResponse(row: OpportunityPackageRow) {
     status: row.status,
     releasedBy: row.released_by,
     releasedAt: row.released_at,
+    draftEmailBody: row.draft_email_body,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -111,13 +114,14 @@ export function opportunityPackageRouter(pool: Pool): Router {
         { title: jobRow.title, requirements: jobRow.requirements },
         candidateRows,
       );
+      const draftEmailBody = composeEmailDraft(content);
 
       const { rows } = await pool.query(
         `INSERT INTO opportunity_packages
-           (opportunity_id, job_opening_id, candidate_ids, content, ai_generated, status)
-         VALUES ($1, $2, $3, $4, true, 'draft')
+           (opportunity_id, job_opening_id, candidate_ids, content, ai_generated, status, draft_email_body)
+         VALUES ($1, $2, $3, $4, true, 'draft', $5)
          RETURNING *`,
-        [opportunityId, jobOpeningId, candidateIds, JSON.stringify(content)],
+        [opportunityId, jobOpeningId, candidateIds, JSON.stringify(content), draftEmailBody],
       );
 
       logger.info(
@@ -197,6 +201,54 @@ export function opportunityPackageRouter(pool: Pool): Router {
       res.status(500).json({ error: "release failed" });
     } finally {
       client.release();
+    }
+  });
+
+  // S-25: saves a human's edits to the pre-filled email draft. Gated to
+  // status = 'draft' the same way release itself is gated -- once a package
+  // is released, its draft_email_body is part of the record of what was
+  // reviewed at release time and shouldn't keep silently changing after
+  // the fact. "Restore AI draft" is a pure client-side recompute from
+  // `content` (composeEmailDraft is deterministic), not a server call, so
+  // there's no corresponding restore endpoint.
+  router.patch("/opportunity-package/:id/email", requireAuth, async (req, res) => {
+    const packageId = req.params.id;
+    const draftEmailBody = req.body?.draftEmailBody;
+
+    if (typeof draftEmailBody !== "string") {
+      res.status(400).json({ error: "draftEmailBody must be a string" });
+      return;
+    }
+
+    try {
+      const { rows: updatedRows } = await pool.query(
+        `UPDATE opportunity_packages
+         SET draft_email_body = $1, updated_at = now()
+         WHERE id = $2 AND status = 'draft'
+         RETURNING *`,
+        [draftEmailBody, packageId],
+      );
+
+      if (updatedRows.length > 0) {
+        res.status(200).json({ package: toPackageResponse(updatedRows[0] as OpportunityPackageRow) });
+        return;
+      }
+
+      const { rows: existingRows } = await pool.query(
+        "SELECT * FROM opportunity_packages WHERE id = $1",
+        [packageId],
+      );
+      if (existingRows.length === 0) {
+        res.status(404).json({ error: "opportunity package not found" });
+        return;
+      }
+      res.status(409).json({
+        error: "opportunity package already released — its email draft is no longer editable",
+        package: toPackageResponse(existingRows[0] as OpportunityPackageRow),
+      });
+    } catch (err) {
+      logger.error({ correlationId: req.correlationId, err }, "opportunity package email save failed");
+      res.status(500).json({ error: "email save failed" });
     }
   });
 

@@ -31,6 +31,7 @@ export interface FakeOpportunityPackageRow {
   status: "draft" | "released";
   released_by: string | null;
   released_at: string | null;
+  draft_email_body: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -125,11 +126,12 @@ export function createFakeOpportunityPackagePool() {
     }
 
     if (sql.includes("INSERT INTO opportunity_packages")) {
-      const [opportunityId, jobOpeningId, candidateIds, contentJson] = params as [
+      const [opportunityId, jobOpeningId, candidateIds, contentJson, draftEmailBody] = params as [
         string,
         string,
         string[],
         string,
+        string | undefined,
       ];
       const now = new Date().toISOString();
       const row: FakeOpportunityPackageRow = {
@@ -142,6 +144,7 @@ export function createFakeOpportunityPackagePool() {
         status: "draft",
         released_by: null,
         released_at: null,
+        draft_email_body: draftEmailBody ?? null,
         created_at: now,
         updated_at: now,
       };
@@ -151,6 +154,21 @@ export function createFakeOpportunityPackagePool() {
 
     if (sql.startsWith("SELECT * FROM opportunity_packages ORDER BY")) {
       return { rows: [...packages].reverse() };
+    }
+
+    if (sql.includes("UPDATE opportunity_packages") && sql.includes("draft_email_body")) {
+      const [draftEmailBody, packageId] = params as [string, string];
+      const row = packages.find((r) => r.id === packageId && r.status === "draft");
+      if (!row) return { rows: [] };
+      row.draft_email_body = draftEmailBody;
+      row.updated_at = new Date().toISOString();
+      return { rows: [row] };
+    }
+
+    if (sql.startsWith("SELECT * FROM opportunity_packages WHERE id")) {
+      const [id] = params as [string];
+      const row = packages.find((r) => r.id === id);
+      return { rows: row ? [row] : [] };
     }
 
     throw new Error(`fakeOpportunityPackagePool: unexpected pool.query — ${sql}`);
