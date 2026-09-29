@@ -52,8 +52,8 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument());
-    const item = screen.getByText("Acme Corp").closest("li");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
+    const item = screen.getByRole("heading", { name: "Acme Corp" }).closest("li");
     expect(item).not.toBeNull();
     // Never a bare number: confidence, the plain-English reasons, and the
     // source all have to appear in the same list item.
@@ -79,7 +79,7 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("High Co")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "High Co" })).toBeInTheDocument());
     const items = screen.getAllByRole("listitem");
     expect(items[0]).toHaveTextContent("#1");
     expect(items[0]).toHaveTextContent("High Co");
@@ -110,8 +110,8 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument());
-    const item = screen.getByText("Acme Corp").closest("li");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
+    const item = screen.getByRole("heading", { name: "Acme Corp" }).closest("li");
     expect(item).toHaveTextContent("weights confidence-007-v1");
     expect(item).toHaveTextContent("baseScore: weight 0.2, value 1, contributes 0.2");
     expect(item).toHaveTextContent("repostedRole: weight 0.32, value 1, contributes 0.32");
@@ -132,8 +132,8 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument());
-    const item = screen.getByText("Acme Corp").closest("li");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
+    const item = screen.getByRole("heading", { name: "Acme Corp" }).closest("li");
     expect(item).toHaveTextContent("No factor breakdown recorded (scored before S-07).");
   });
 
@@ -173,8 +173,8 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("Insight Analytics")).toBeInTheDocument());
-    const item = screen.getByText("Insight Analytics").closest("li");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Insight Analytics" })).toBeInTheDocument());
+    const item = screen.getByRole("heading", { name: "Insight Analytics" }).closest("li");
     // The badge and its reason appear together — never a flag without the why.
     expect(item).toHaveTextContent("hard to fill: in-demand role type, open 30 days, reposted role");
   });
@@ -192,8 +192,8 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument());
-    const item = screen.getByText("Acme Corp").closest("li");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
+    const item = screen.getByRole("heading", { name: "Acme Corp" }).closest("li");
     expect(item).not.toHaveTextContent("hard to fill");
   });
 
@@ -210,8 +210,8 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("Insight Analytics")).toBeInTheDocument());
-    const item = screen.getByText("Insight Analytics").closest("li");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Insight Analytics" })).toBeInTheDocument());
+    const item = screen.getByRole("heading", { name: "Insight Analytics" }).closest("li");
     expect(item).toHaveTextContent("Why hard to fill (weights hard-to-fill-026-v1)");
     expect(item).toHaveTextContent("roleScarcity: weight 0.6, value 1, contributes 0.6");
   });
@@ -248,8 +248,8 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("Insight Analytics")).toBeInTheDocument());
-    const item = screen.getByText("Insight Analytics").closest("li");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Insight Analytics" })).toBeInTheDocument());
+    const item = screen.getByRole("heading", { name: "Insight Analytics" }).closest("li");
     // The structured breakdown never hides which evidence drove the score:
     // roleScarcity says "measured", the other two factors (basis "n/a") say nothing extra.
     expect(item).toHaveTextContent("roleScarcity: weight 0.6, value 1, contributes 0.6, basis: measured");
@@ -290,8 +290,8 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("Insight Analytics")).toBeInTheDocument());
-    const item = screen.getByText("Insight Analytics").closest("li");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Insight Analytics" })).toBeInTheDocument());
+    const item = screen.getByRole("heading", { name: "Insight Analytics" }).closest("li");
     expect(item).not.toBeNull();
     const howScored = within(item as HTMLElement).getByLabelText("how this was scored");
     // Not behind a <details> collapse -- visible without any interaction.
@@ -320,10 +320,10 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
     expect(scoreFetch).not.toHaveBeenCalled();
 
-    const item = screen.getByText("Acme Corp").closest("li") as HTMLElement;
+    const item = screen.getByRole("heading", { name: "Acme Corp" }).closest("li") as HTMLElement;
     fireEvent.click(within(item).getByRole("button", { name: "Show raw payload" }));
 
     await waitFor(() => expect(within(item).getByText(/"id": "raw-1"/)).toBeInTheDocument());
@@ -349,8 +349,8 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument());
-    const item = screen.getByText("Acme Corp").closest("li") as HTMLElement;
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
+    const item = screen.getByRole("heading", { name: "Acme Corp" }).closest("li") as HTMLElement;
     fireEvent.click(within(item).getByRole("button", { name: "Show raw payload" }));
 
     await waitFor(() =>
@@ -394,8 +394,8 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("GitLab")).toBeInTheDocument());
-    const item = screen.getByText("GitLab").closest("li") as HTMLElement;
+    await waitFor(() => expect(screen.getByRole("heading", { name: "GitLab" })).toBeInTheDocument());
+    const item = screen.getByRole("heading", { name: "GitLab" }).closest("li") as HTMLElement;
     // Not the hard-to-fill badge (opportunity isn't flagged) -- the capacity
     // rationale line inside "How this was scored" instead.
     expect(item).not.toHaveTextContent("hard to fill:");
@@ -439,8 +439,8 @@ describe("OpportunitiesList", () => {
 
     render(<OpportunitiesList />);
 
-    await waitFor(() => expect(screen.getByText("GitLab")).toBeInTheDocument());
-    const item = screen.getByText("GitLab").closest("li") as HTMLElement;
+    await waitFor(() => expect(screen.getByRole("heading", { name: "GitLab" })).toBeInTheDocument());
+    const item = screen.getByRole("heading", { name: "GitLab" }).closest("li") as HTMLElement;
     const howScored = within(item).getByLabelText("how this was scored");
     expect(howScored).toHaveTextContent("excluded, dated 2016-07-20 is older than the 24-month recency window");
   });

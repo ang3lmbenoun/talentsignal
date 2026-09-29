@@ -530,7 +530,6 @@ hr{ border:none; border-top:1px solid var(--border); margin:1.1rem 0; }
   gap:var(--space-3); margin:var(--space-4) 0;
 }
 .client-detail-count{ font-size:12px; color:var(--mute); margin:0 0 var(--space-3); }
-.opportunity-basis-dot--none::before{ background:var(--border); }
 
 /* ---- overview: S-25 "Top opportunities" panel ---- */
 .overview-top-opps{ margin-top:var(--space-4); }
@@ -591,9 +590,16 @@ hr{ border:none; border-top:1px solid var(--border); margin:1.1rem 0; }
   background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
   box-shadow:var(--shadow); padding:var(--space-3) var(--space-4);
 }
-.opportunity-kpi-label{ font-size:11px; font-weight:600; color:var(--mute); margin-bottom:.35em; }
-.opportunity-kpi-value{ font-size:26px; font-weight:800; line-height:1; }
+.opportunity-kpi-tile-top{ display:flex; align-items:center; justify-content:space-between; }
+.opportunity-kpi-label{ font-size:11px; font-weight:600; color:var(--mute); }
+.opportunity-kpi-icon{
+  display:flex; align-items:center; justify-content:center; width:24px; height:24px;
+  border-radius:7px; background:var(--accent-soft); color:var(--accent); flex-shrink:0;
+}
+.opportunity-kpi-value{ font-size:26px; font-weight:800; line-height:1; margin-top:.35em; }
 .opportunity-kpi-value--accent{ color:var(--accent); }
+.opportunity-kpi-sparkline{ width:100%; height:18px; margin-top:var(--space-2); }
+.opportunities-filter-count{ margin:0 0 var(--space-3); }
 
 ul.opportunities-grid{
   list-style:none; margin:0; padding:0; display:grid; gap:var(--space-4);
@@ -613,8 +619,10 @@ ul.opportunities-grid{
 .opportunity-card-rail{ position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--border); }
 .opportunity-card-rail--priority{ background:var(--accent); }
 .opportunity-card-rail--green{ background:var(--success); }
+.opportunity-card-rail--indigo{ background:var(--accent); }
 .opportunity-card-rail--amber{ background:var(--warning); }
 .opportunity-card-rail--red{ background:var(--danger); }
+.opportunity-card-rail--darkred{ background:#5c1a1f; }
 .opportunity-card-body{ padding:var(--space-4) var(--space-4) var(--space-4) calc(var(--space-4) + 5px); display:flex; flex-direction:column; gap:var(--space-3); }
 
 .opportunity-card-header{ display:flex; align-items:flex-start; gap:var(--space-3); }
@@ -638,12 +646,18 @@ ul.opportunities-grid{
   display:inline-flex; align-items:center; height:26px; padding:0 .6em;
   border-radius:8px; font-size:12px; font-weight:700;
 }
+/* S-25: 5-tier age scheme (was green/amber/red at 30/54d) -- green <=30d,
+   indigo 31-90d, amber 91-180d, red >180d, darkred "stale" >365d. */
 .opportunity-age-badge--green{ background:#e2f2ea; color:var(--success); }
+.opportunity-age-badge--indigo{ background:var(--accent-soft); color:var(--accent); }
 .opportunity-age-badge--amber{ background:#fbf0dd; color:var(--warning); }
 .opportunity-age-badge--red{ background:#fbe7e8; color:var(--danger); }
+.opportunity-age-badge--darkred{ background:#5c1a1f; color:#ffb4bb; }
 :root[data-theme="dark"] .opportunity-age-badge--green{ background:#132a20; }
+:root[data-theme="dark"] .opportunity-age-badge--indigo{ background:#241f47; }
 :root[data-theme="dark"] .opportunity-age-badge--amber{ background:#2e2411; }
 :root[data-theme="dark"] .opportunity-age-badge--red{ background:#33191c; }
+:root[data-theme="dark"] .opportunity-age-badge--darkred{ background:#3a0f13; color:#ff9ea5; }
 
 .opportunity-spread-badge{
   display:inline-flex; align-items:center; gap:.4em; height:26px; padding:0 .65em;
@@ -653,6 +667,39 @@ ul.opportunities-grid{
 .opportunity-spread-badge--medium{ background:transparent; color:var(--accent); box-shadow:inset 0 0 0 1.5px var(--accent); }
 .opportunity-spread-badge--low{ background:var(--surface-2); color:var(--mute); box-shadow:inset 0 0 0 1px var(--border); }
 .opportunity-spread-info{ cursor:help; }
+
+/* S-25: per-card "why this is a signal" panel -- same visual language as
+   Overview's .kpi-tile-why / Clients' .client-card-why (left accent border
+   over a soft background), reused here for consistency across screens. */
+.opportunity-why{
+  padding:var(--space-2) var(--space-3); background:var(--surface-2);
+  border-left:3px solid var(--accent); border-radius:0 8px 8px 0;
+  font-size:12px; line-height:1.5;
+}
+.opportunity-why b{
+  display:block; color:var(--accent); font-size:10px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.06em; margin-bottom:2px;
+}
+
+/* Hover-revealed factor-weight breakdown, distinct from the always-visible
+   "How this was scored" section and the click-to-expand "Why this
+   score"/"Why hard to fill" <details> below -- this is an additional,
+   at-a-glance visual (horizontal bars), not a replacement for either. */
+.opportunity-factor-hover{ position:relative; }
+.opportunity-factor-panel{
+  display:none; position:absolute; z-index:2; left:0; right:0; top:calc(100% + 6px);
+  background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  box-shadow:var(--shadow-hover); padding:var(--space-3);
+}
+.opportunity-factor-hover:hover .opportunity-factor-panel,
+.opportunity-factor-hover:focus-within .opportunity-factor-panel{ display:block; }
+.opportunity-factor-panel-title{ font-size:11px; font-weight:700; margin:0 0 var(--space-2); }
+.opportunity-factor-row{
+  display:grid; grid-template-columns:96px 1fr 34px; gap:8px; align-items:center;
+  font-size:11px; color:var(--mute); margin:5px 0;
+}
+.opportunity-factor-barline{ height:6px; border-radius:9px; background:var(--surface-2); overflow:hidden; }
+.opportunity-factor-barline i{ display:block; height:100%; background:var(--accent); border-radius:9px; }
 
 .opportunity-stale-callout{
   display:flex; align-items:center; gap:.4em; font-size:11.5px; font-weight:700; color:var(--warning);
@@ -688,9 +735,11 @@ ul.opportunities-grid{
 .opportunity-basis-dot::before{
   content:""; width:9px; height:9px; border-radius:999px; box-shadow:inset 0 0 0 1px var(--mute);
 }
-.opportunity-basis-dot--measured::before{ background:var(--accent); }
-.opportunity-basis-dot--curated::before{ background:var(--mute); }
-.opportunity-basis-dot--none::before{ background:transparent; }
+/* S-25: measured=green, curated=indigo, none=grey (was accent/mute/transparent
+   pre-redesign) -- matches the mockup's .basis pill legend exactly. */
+.opportunity-basis-dot--measured::before{ background:var(--success); }
+.opportunity-basis-dot--curated::before{ background:var(--accent); }
+.opportunity-basis-dot--none::before{ background:var(--border); }
 
 .raw-payload{ display:inline-flex; }
 .opportunity-prove-it{

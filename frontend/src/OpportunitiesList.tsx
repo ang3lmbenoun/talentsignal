@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { Briefcase, Flame, Building2, Users, type LucideIcon } from "lucide-react";
 import { getStoredToken } from "./auth";
+import { classifyFamily } from "./lib/basisDerivation";
 
 interface ScoreFactor {
   factor: string;
@@ -21,6 +23,10 @@ interface ScoreFactor {
 interface Opportunity {
   id: string;
   company: string;
+  // Real API field, not previously typed here (this screen used extractDaysOpen
+  // / familyKey instead) -- added for S-25's role-family filter, which needs
+  // classifyFamily()'s title-based fallback the same way Clients/Signals do.
+  title?: string;
   confidenceScore: number;
   reasons: string[];
   source: string;
@@ -59,6 +65,29 @@ type OpportunitiesState =
 // "Load more" keeps the existing plain <ul>/<li> markup every current test
 // already asserts against.
 const PAGE_SIZE = 50;
+
+// S-25 filter bar. Reuses the exact real-field predicates already used
+// elsewhere in this file (extractDaysOpen) and across the app (Signals'
+// reposted/no-salary reason checks) -- no new signal definitions invented.
+const ALL_FILTER = "all";
+const SIGNAL_TYPE_OPTIONS: { value: string; label: string; test: (o: Opportunity) => boolean }[] = [
+  { value: "reposted", label: "reposted role", test: (o) => o.reasons.some((r) => r.includes("reposted")) },
+  {
+    value: "long-open",
+    label: "long-open",
+    test: (o) => {
+      const d = extractDaysOpen(o);
+      return d !== undefined && d >= 54;
+    },
+  },
+  { value: "no-salary", label: "no salary range", test: (o) => o.reasons.some((r) => r.includes("no salary range")) },
+];
+const AGE_BUCKET_OPTIONS: { value: string; label: string; test: (daysOpen: number) => boolean }[] = [
+  { value: "0-30", label: "≤30d", test: (d) => d <= 30 },
+  { value: "31-90", label: "31–90d", test: (d) => d > 30 && d <= 90 },
+  { value: "91-180", label: "91–180d", test: (d) => d > 90 && d <= 180 },
+  { value: "180+", label: ">180d", test: (d) => d > 180 },
+];
 
 type RawPayloadState =
   | { status: "collapsed" }
@@ -155,6 +184,42 @@ function roleScarcityFactor(opportunity: Opportunity): ScoreFactor | undefined {
   return opportunity.hardToFillFactors?.find((f) => f.factor === "roleScarcity");
 }
 
+function opportunityBasis(opportunity: Opportunity): "measured" | "curated" | "none" {
+  const factor = roleScarcityFactor(opportunity);
+  return factor?.basis === "measured" || factor?.basis === "curated" ? factor.basis : "none";
+}
+
+// S-25 role-family filter: prefers the real, stored familyKey (S-23
+// backfill); falls back to title-based classification only when a title is
+// present, and to "general-other" otherwise -- never guesses from nothing.
+function familyFor(opportunity: Opportunity): string {
+  if (opportunity.familyKey) return opportunity.familyKey;
+  if (opportunity.title) return classifyFamily(opportunity.title);
+  return "general-other";
+}
+
+// S-25 "why this is a signal" -- 1-2 sentence narrative built from the same
+// real reasons/basis/family fields already rendered elsewhere on the card
+// (legacy summary line, basis dot, "how this was scored"). No invented
+// language beyond joining real facts into a sentence.
+function opportunityWhy(opportunity: Opportunity): string {
+  const family = familyFor(opportunity);
+  const basis = opportunityBasis(opportunity);
+  const reposted = opportunity.reasons.some((r) => r.includes("reposted"));
+  const noSalary = opportunity.reasons.some((r) => r.includes("no salary range"));
+
+  const clauses: string[] = [];
+  if (reposted) clauses.push(`reposted this ${family} role`);
+  if (noSalary) clauses.push("no salary published");
+  if (basis === "measured") clauses.push("measured scarcity in family");
+  else if (basis === "curated") clauses.push("curated scarcity match");
+
+  if (clauses.length === 0) {
+    return `${opportunity.company}'s ${family} role carries no reposting, salary-gap, or scarcity signal in the currently loaded data.`;
+  }
+  return `${opportunity.company} ${clauses.join(", ")}.`;
+}
+
 // PROPOSED heuristic, not yet signed off by Ali -- see
 // 06_decisions/048-opportunity-card-spread-potential-and-top-pick-heuristic.md.
 // There is no structured day-count field on Opportunity; the only place a
@@ -224,6 +289,15 @@ function companyMonogram(company: string): { initials: string; color: string } {
   return { initials, color: MONOGRAM_PALETTE[hash % MONOGRAM_PALETTE.length] };
 }
 
+// S-25: ring color now bands by confidence (green >=85, indigo 70-84, amber
+// 50-69, red <50) -- was a flat --accent stroke regardless of value.
+function confidenceRingColor(percent: number): string {
+  if (percent >= 85) return "var(--success)";
+  if (percent >= 70) return "var(--accent)";
+  if (percent >= 50) return "var(--warning)";
+  return "var(--danger)";
+}
+
 function ConfidenceRing({ percent }: { percent: number }) {
   const radius = 17;
   const circumference = 2 * Math.PI * radius;
@@ -236,7 +310,7 @@ function ConfidenceRing({ percent }: { percent: number }) {
         cy="23"
         r={radius}
         fill="none"
-        stroke="var(--accent)"
+        stroke={confidenceRingColor(percent)}
         strokeWidth={4}
         strokeLinecap="round"
         strokeDasharray={circumference.toFixed(1)}
@@ -250,13 +324,36 @@ function ConfidenceRing({ percent }: { percent: number }) {
   );
 }
 
-function KpiTile({ label, value, accent }: { label: string; value: number | undefined; accent?: boolean }) {
+// S-25: adds an icon + placeholder sparkline per the mockup's metric-card
+// treatment (same "explicitly not data-bound, no time-series yet" pattern
+// as Overview's KpiTile) -- the value/label themselves are unchanged, still
+// the same real counts this screen has always shown.
+function KpiTile({
+  label,
+  value,
+  icon,
+  accent,
+}: {
+  label: string;
+  value: number | undefined;
+  icon: LucideIcon;
+  accent?: boolean;
+}) {
+  const Icon = icon;
   return (
     <div className="opportunity-kpi-tile">
-      <div className="opportunity-kpi-label">{label}</div>
+      <div className="opportunity-kpi-tile-top">
+        <span className="opportunity-kpi-label">{label}</span>
+        <span className="opportunity-kpi-icon">
+          <Icon size={14} aria-hidden="true" />
+        </span>
+      </div>
       <div className={accent ? "opportunity-kpi-value opportunity-kpi-value--accent" : "opportunity-kpi-value"}>
         {value === undefined ? "—" : value}
       </div>
+      <svg className="opportunity-kpi-sparkline" viewBox="0 0 100 24" role="img" aria-label="Trend placeholder, no history yet">
+        <path d="M0 18 L15 12 L30 15 L45 8 L60 12 L75 6 L100 10" fill="none" stroke="var(--border)" strokeWidth="2" />
+      </svg>
     </div>
   );
 }
@@ -275,9 +372,23 @@ function OpportunityCard({
   const monogram = companyMonogram(opportunity.company);
   const confidencePct = Math.round(opportunity.confidenceScore * 100);
   const roleScarcity = roleScarcityFactor(opportunity);
-  const basis = roleScarcity?.basis && roleScarcity.basis !== "n/a" ? roleScarcity.basis : "none";
-  const ageColor = daysOpen === undefined ? undefined : daysOpen < 30 ? "green" : daysOpen < 54 ? "amber" : "red";
+  const basis = opportunityBasis(opportunity);
   const stale = daysOpen !== undefined && daysOpen > 365;
+  // S-25: 5-tier scheme (was green/amber/red at 30/54d) -- green <=30d,
+  // indigo 31-90d, amber 91-180d, red >180d, darkred "stale" >365d (the
+  // darkred tier and the >365d stale-callout below both key off `stale`).
+  const ageColor =
+    daysOpen === undefined
+      ? undefined
+      : stale
+        ? "darkred"
+        : daysOpen <= 30
+          ? "green"
+          : daysOpen <= 90
+            ? "indigo"
+            : daysOpen <= 180
+              ? "amber"
+              : "red";
   const priority = Boolean(opportunity.hardToFill) && spread === "high";
 
   const basisTitle =
@@ -339,6 +450,14 @@ function OpportunityCard({
           <div className="opportunity-stale-callout">verify · likely stale ({daysOpen}d open)</div>
         )}
 
+        {/* S-25 (NEW): 1-2 sentence plain-English "why" built from this
+            row's own real reasons/family/basis -- same facts as the legacy
+            summary line and basis dot below, just narrated. */}
+        <div className="opportunity-why">
+          <b>Why this is a signal</b>
+          {opportunityWhy(opportunity)}
+        </div>
+
         <div className="opportunity-card-pills">
           {opportunity.reasons.map((reason) => (
             <span className="opportunity-pill" key={reason}>
@@ -347,6 +466,28 @@ function OpportunityCard({
           ))}
           {opportunity.familyKey && <span className="opportunity-pill">{opportunity.familyKey}</span>}
           <span className="opportunity-pill">{opportunity.source}</span>
+          {/* S-25 (NEW): hover/focus reveals the real per-factor weight
+              breakdown as bars -- additional to (not a replacement for) the
+              always-visible "How this was scored" section and the
+              click-to-expand "Why this score"/"Why hard to fill" <details>
+              further down, which stay exactly as before. */}
+          {opportunity.hardToFillFactors && opportunity.hardToFillFactors.length > 0 && (
+            <span className="opportunity-pill opportunity-factor-hover" tabIndex={0}>
+              factor weights ⓘ
+              <div className="opportunity-factor-panel">
+                <p className="opportunity-factor-panel-title">Hard-to-fill factor weights</p>
+                {opportunity.hardToFillFactors.map((f) => (
+                  <div className="opportunity-factor-row" key={f.factor}>
+                    <span>{f.factor}</span>
+                    <span className="opportunity-factor-barline">
+                      <i style={{ width: `${Math.round(f.weight * 100)}%` }} />
+                    </span>
+                    <span>{f.weight}</span>
+                  </div>
+                ))}
+              </div>
+            </span>
+          )}
         </div>
 
         {/* Legacy summary line -- keeps the S-04/HF-2 trust-scenario strings
@@ -457,6 +598,11 @@ export function OpportunitiesList() {
   // as a guessed/sample number.
   const [clientCount, setClientCount] = useState<number | undefined>(undefined);
   const [candidateCount, setCandidateCount] = useState<number | undefined>(undefined);
+  const [companyFilter, setCompanyFilter] = useState(ALL_FILTER);
+  const [familyFilter, setFamilyFilter] = useState(ALL_FILTER);
+  const [signalFilter, setSignalFilter] = useState(ALL_FILTER);
+  const [basisFilter, setBasisFilter] = useState(ALL_FILTER);
+  const [ageFilter, setAgeFilter] = useState(ALL_FILTER);
 
   useEffect(() => {
     let cancelled = false;
@@ -540,18 +686,76 @@ export function OpportunitiesList() {
 
   const allOpportunities = state.opportunities;
   const sortedOpportunities = sortOpportunities(allOpportunities);
-  const visibleOpportunities = sortedOpportunities.slice(0, visibleCount);
   const topPickId = findTopPick(allOpportunities);
   const hardToFillCount = allOpportunities.filter((o) => o.hardToFill).length;
+
+  const filteredOpportunities = sortedOpportunities.filter((o) => {
+    if (companyFilter !== ALL_FILTER && o.company !== companyFilter) return false;
+    if (familyFilter !== ALL_FILTER && familyFor(o) !== familyFilter) return false;
+    if (basisFilter !== ALL_FILTER && opportunityBasis(o) !== basisFilter) return false;
+    if (signalFilter !== ALL_FILTER) {
+      const signal = SIGNAL_TYPE_OPTIONS.find((s) => s.value === signalFilter);
+      if (signal && !signal.test(o)) return false;
+    }
+    if (ageFilter !== ALL_FILTER) {
+      const daysOpen = extractDaysOpen(o);
+      if (daysOpen === undefined) return false;
+      const bucket = AGE_BUCKET_OPTIONS.find((b) => b.value === ageFilter);
+      if (bucket && !bucket.test(daysOpen)) return false;
+    }
+    return true;
+  });
+  const visibleOpportunities = filteredOpportunities.slice(0, visibleCount);
+
+  const companies = [...new Set(allOpportunities.map((o) => o.company))].sort();
+  const families = [...new Set(allOpportunities.map((o) => familyFor(o)))].sort();
 
   return (
     <>
       <div className="opportunity-kpi-strip">
-        <KpiTile label="Total opportunities" value={allOpportunities.length} />
-        <KpiTile label="Hard to fill" value={hardToFillCount} accent />
-        <KpiTile label="Total clients" value={clientCount} />
-        <KpiTile label="Total candidates" value={candidateCount} />
+        <KpiTile label="Total opportunities" value={allOpportunities.length} icon={Briefcase} />
+        <KpiTile label="Hard to fill" value={hardToFillCount} icon={Flame} accent />
+        <KpiTile label="Total clients" value={clientCount} icon={Building2} />
+        <KpiTile label="Total candidates" value={candidateCount} icon={Users} />
       </div>
+
+      <div className="filterbar">
+        <select className="select" value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setVisibleCount(PAGE_SIZE); }}>
+          <option value={ALL_FILTER}>All client companies</option>
+          {companies.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <select className="select" value={familyFilter} onChange={(e) => { setFamilyFilter(e.target.value); setVisibleCount(PAGE_SIZE); }}>
+          <option value={ALL_FILTER}>All role families</option>
+          {families.map((f) => (
+            <option key={f} value={f}>{f}</option>
+          ))}
+        </select>
+        <select className="select" value={signalFilter} onChange={(e) => { setSignalFilter(e.target.value); setVisibleCount(PAGE_SIZE); }}>
+          <option value={ALL_FILTER}>All signal types</option>
+          {SIGNAL_TYPE_OPTIONS.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </select>
+        <select className="select" value={basisFilter} onChange={(e) => { setBasisFilter(e.target.value); setVisibleCount(PAGE_SIZE); }}>
+          <option value={ALL_FILTER}>All basis</option>
+          <option value="measured">measured</option>
+          <option value="curated">curated</option>
+          <option value="none">none</option>
+        </select>
+        <select className="select" value={ageFilter} onChange={(e) => { setAgeFilter(e.target.value); setVisibleCount(PAGE_SIZE); }}>
+          <option value={ALL_FILTER}>Any age</option>
+          {AGE_BUCKET_OPTIONS.map((b) => (
+            <option key={b.value} value={b.value}>{b.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <p className="caption opportunities-filter-count">
+        Showing {filteredOpportunities.length} of {allOpportunities.length} opportunities · sort · hard-to-fill ↓
+      </p>
+
       <ul aria-label="opportunities" className="opportunities-grid">
         {visibleOpportunities.map((opportunity, index) => (
           <OpportunityCard
@@ -562,13 +766,13 @@ export function OpportunitiesList() {
           />
         ))}
       </ul>
-      {visibleCount < sortedOpportunities.length && (
+      {visibleCount < filteredOpportunities.length && (
         <button
           type="button"
           className="opportunities-load-more"
           onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
         >
-          Load more ({visibleCount} of {sortedOpportunities.length})
+          Load more ({visibleCount} of {filteredOpportunities.length})
         </button>
       )}
     </>
