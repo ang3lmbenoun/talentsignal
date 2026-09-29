@@ -777,6 +777,58 @@ ul.opportunities-grid{
 }
 .resume-upload-zone p{ margin:.2em 0; }
 .resume-upload-zone-hint{ font-size:12.5px; }
+
+/* S-25: prominent variant per Ali's Sep 22 ask -- dashed indigo border,
+   >=200px tall, upload-cloud icon + explicit copy. */
+.resume-upload-zone--prominent{
+  border-color:var(--accent); min-height:200px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:linear-gradient(120deg, var(--accent-soft), var(--surface));
+  color:var(--accent);
+}
+.resume-upload-zone-title{ font-size:15px; font-weight:700; color:var(--text); margin:.5em 0 .2em; }
+.resume-upload-zone--prominent .resume-upload-zone-hint{ color:var(--mute); }
+.resume-upload-linkedin{
+  margin-top:var(--space-3); width:min(320px, 90%); text-align:left; cursor:text;
+}
+
+.eyebrow-label{
+  font-size:10.5px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.06em;
+}
+.candidate-parsed-preview{ margin-bottom:var(--space-4); }
+.candidate-parsed-preview-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--space-3); }
+
+.candidate-add-manually{ margin-bottom:var(--space-4); }
+.candidate-add-manually summary{ list-style:none; }
+.candidate-add-manually summary::-webkit-details-marker{ display:none; }
+.btn-link{
+  color:var(--accent); font-weight:600; font-size:13px; cursor:pointer; display:inline-block;
+}
+.btn-link:hover{ text-decoration:underline; }
+.candidate-add-manually form{ margin-top:var(--space-3); }
+
+.candidate-row{ display:flex; gap:var(--space-3); align-items:flex-start; }
+.candidate-initials{
+  width:34px; height:34px; border-radius:999px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  background:#e6f4ee; color:var(--success); font-weight:800; font-size:12px;
+}
+.candidate-row h4{ margin:0 0 .3em; font-size:14px; }
+.candidate-skills{ display:flex; flex-wrap:wrap; gap:5px; margin:.3em 0; }
+.candidate-skill-pill{
+  font-size:11px; background:var(--surface-2); border:1px solid var(--border);
+  border-radius:999px; padding:.2em .6em; color:var(--text);
+}
+.candidate-chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:.3em; }
+
+.candidate-grid{
+  list-style:none; margin:0; padding:0; display:grid; gap:var(--space-4);
+  grid-template-columns:1fr;
+}
+@media (min-width:640px){ .candidate-grid{ grid-template-columns:repeat(2, 1fr); } }
+@media (min-width:1024px){ .candidate-grid{ grid-template-columns:repeat(3, 1fr); } }
+.candidate-card{ display:flex; flex-direction:column; gap:var(--space-3); }
+
 .resume-upload-toast{
   display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);
   background:var(--surface-2); border:1px solid var(--border); border-radius:8px;
