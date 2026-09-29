@@ -144,7 +144,11 @@ export function App() {
         <RoleGate allow={["admin", "sales"]}>{navBtn("opportunities", "Opportunities", Briefcase)}</RoleGate>
         <RoleGate allow={["admin", "sales"]}>{navBtn("signals", "Signals", Radio)}</RoleGate>
         <RoleGate allow={["admin", "sales"]}>{navBtn("targeting", "Targeting", Target)}</RoleGate>
-        <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("clients", "Clients", Building2)}</RoleGate>
+        {/* S-25: Clients now aggregates GET /api/hidden-demand/opportunities
+            (admin/sales-only on the backend), not the old CRM /api/clients
+            (admin/sales/recruiter) -- narrowed to match, so a recruiter
+            never lands on a screen that can't load. */}
+        <RoleGate allow={["admin", "sales"]}>{navBtn("clients", "Clients", Building2)}</RoleGate>
         <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("candidates", "Candidates", Users)}</RoleGate>
         <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("jobs", "Jobs", ClipboardList)}</RoleGate>
         <RoleGate allow={["admin", "sales"]}>{navBtn("match", "Match", Link2)}</RoleGate>
@@ -193,7 +197,7 @@ export function App() {
             </RoleGate>
           </div>
           <div hidden={view !== "clients"}>
-            <RoleGate allow={["admin", "sales", "recruiter"]}>
+            <RoleGate allow={["admin", "sales"]}>
               <ClientsScreen />
             </RoleGate>
           </div>

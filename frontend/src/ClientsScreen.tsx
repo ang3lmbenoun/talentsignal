@@ -1,159 +1,230 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { getStoredToken, getStoredRole } from "./auth";
+import { useEffect, useMemo, useState } from "react";
+import { getStoredToken } from "./auth";
+import {
+  type ClientAggregate,
+  type ClientOpportunity,
+  clientWhyItMatters,
+  computeClientAggregates,
+} from "./lib/clientAggregation";
+import { median } from "./lib/basisDerivation";
+import { ClientDetail } from "./ClientDetail";
 
-interface Client {
-  id: string;
-  name: string;
-  contactInfo?: { email?: string; phone?: string };
-  createdAt: string;
-}
-
-type ClientsState =
+// S-25 Clients redesign: this screen now shows opportunity source-companies
+// (GitLab, Gopuff, ...) as "client" cards, not the real CRM `clients` table
+// (backend/src/routes/clients.ts) that used to render here. See
+// frontend/src/lib/clientAggregation.ts's header comment for why, and
+// 06_decisions/046/049 for the source-health/basis honesty rules this
+// screen surfaces rather than hides.
+//
+// Same fetch every other screen (Overview, Signals, Opportunities) already
+// makes -- no new backend endpoint, one array, every consumer derives
+// client-side from the same real rows.
+type OpportunitiesState =
   | { status: "loading" }
-  | { status: "ok"; clients: Client[] }
+  | { status: "ok"; opportunities: ClientOpportunity[] }
   | { status: "unauthenticated" }
   | { status: "error" };
 
-// Matches the backend's PII_VISIBLE_ROLES (backend/src/routes/clients.ts) —
-// only recruiter/admin can create/edit a client (the write routes are
-// role-gated because both carry contactInfo), so the create form is hidden
-// rather than shown-then-403'd for anyone else.
-const CAN_MANAGE_ROLES = ["admin", "recruiter"];
+function useOpportunities(): OpportunitiesState {
+  const [state, setState] = useState<OpportunitiesState>({ status: "loading" });
 
-export function ClientsScreen() {
-  const [state, setState] = useState<ClientsState>({ status: "loading" });
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const role = getStoredRole();
-  const canManage = role !== null && CAN_MANAGE_ROLES.includes(role);
-
-  async function loadClients() {
+  useEffect(() => {
+    let cancelled = false;
     const token = getStoredToken();
     if (!token) {
       setState({ status: "unauthenticated" });
       return;
     }
-    try {
-      const res = await fetch("/api/clients", { headers: { Authorization: `Bearer ${token}` } });
-      if (res.status === 401) throw new Error("unauthenticated");
-      if (!res.ok) throw new Error(`clients fetch failed: ${res.status}`);
-      const body = (await res.json()) as { clients: Client[] };
-      setState({ status: "ok", clients: body.clients });
-    } catch (err) {
-      setState(
-        err instanceof Error && err.message === "unauthenticated"
-          ? { status: "unauthenticated" }
-          : { status: "error" },
-      );
-    }
-  }
 
-  useEffect(() => {
-    loadClients();
-    // loadClients only reads from stable module-level storage helpers and
-    // never changes identity across renders, so this only needs to run once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetch("/api/hidden-demand/opportunities?includeSeedData=true", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => {
+        if (res.status === 401) throw new Error("unauthenticated");
+        if (!res.ok) throw new Error(`opportunities fetch failed: ${res.status}`);
+        return res.json() as Promise<{ opportunities: ClientOpportunity[] }>;
+      })
+      .then((body) => {
+        if (!cancelled) setState({ status: "ok", opportunities: body.opportunities });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setState(
+          err instanceof Error && err.message === "unauthenticated"
+            ? { status: "unauthenticated" }
+            : { status: "error" },
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFormError(null);
-    setSubmitting(true);
+  return state;
+}
 
-    const token = getStoredToken();
-    const contactInfo: Record<string, string> = {};
-    if (email.trim()) contactInfo.email = email.trim();
-    if (phone.trim()) contactInfo.phone = phone.trim();
+function monogramFor(name: string): { initials: string; color: string } {
+  const palette = ["#5a4be0", "#0d9488", "#c02c86", "#c67c12", "#1f8a54", "#2f6fed"];
+  const initials = name.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || "—";
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return { initials, color: palette[hash % palette.length] };
+}
 
-    try {
-      const res = await fetch("/api/clients", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name, contactInfo }),
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        setFormError(body.error ?? "failed to create client");
-        return;
-      }
-      setName("");
-      setEmail("");
-      setPhone("");
-      await loadClients();
-    } catch {
-      setFormError("network error — could not reach the server");
-    } finally {
-      setSubmitting(false);
-    }
+function ClientCard({
+  client,
+  allClients,
+  onOpen,
+}: {
+  client: ClientAggregate;
+  allClients: ClientAggregate[];
+  onOpen: (company: string) => void;
+}) {
+  const monogram = monogramFor(client.company);
+  const verdictClass =
+    client.verdict === "healthy" ? "live" : client.verdict === "fixture" ? "fixture" : "flag";
+
+  return (
+    <article
+      className="card client-card"
+      tabIndex={0}
+      role="button"
+      aria-label={`Open ${client.company}`}
+      onClick={() => onOpen(client.company)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onOpen(client.company);
+      }}
+    >
+      <div className="client-card-header">
+        <span className="opportunity-monogram" style={{ background: monogram.color }}>
+          {monogram.initials}
+        </span>
+        <div>
+          <h4>{client.company}</h4>
+          <span className={`source-badge source-badge--${verdictClass}`}>{client.verdict}</span>
+        </div>
+      </div>
+      <div className="client-card-pills">
+        <span className="opportunity-pill">Open reqs · {client.openReqs}</span>
+        <span className="opportunity-pill">Median · {client.medianDaysOpen ?? "—"}d</span>
+        <span className="opportunity-pill">Hard-to-fill · {client.hardToFillCount}</span>
+      </div>
+      <p className="client-card-why">{clientWhyItMatters(client, allClients)}</p>
+      {client.verdict === "flagged — excluded" && (
+        <p
+          className="client-card-flag-note"
+          title="Per 06_decisions/046: this source's median days_open is excluded from measured role-scarcity scoring because zombie (long-abandoned) requisitions skew it far above every other source."
+        >
+          flagged — excluded from median-based scoring
+        </p>
+      )}
+    </article>
+  );
+}
+
+const SORT_OPEN_REQS_DESC = "open-reqs-desc";
+const SORT_MEDIAN_DESC = "median-desc";
+
+export function ClientsScreen() {
+  const opportunitiesState = useOpportunities();
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [showFixtures, setShowFixtures] = useState(false);
+  const [sortBy, setSortBy] = useState(SORT_OPEN_REQS_DESC);
+
+  const opportunities = opportunitiesState.status === "ok" ? opportunitiesState.opportunities : [];
+  const allAggregates = useMemo(() => computeClientAggregates(opportunities), [opportunities]);
+
+  const visibleAggregates = useMemo(() => {
+    const filtered = showFixtures ? allAggregates : allAggregates.filter((c) => c.verdict !== "fixture");
+    return [...filtered].sort((a, b) =>
+      sortBy === SORT_MEDIAN_DESC
+        ? (b.medianDaysOpen ?? -1) - (a.medianDaysOpen ?? -1)
+        : b.openReqs - a.openReqs,
+    );
+  }, [allAggregates, showFixtures, sortBy]);
+
+  // Mini-KPI strip. "Active clients" is every client this screen can ever
+  // show, since a card only exists because at least one real opportunity
+  // named that company -- there is no separate "known companies with zero
+  // open reqs" list in this data model, so the two numbers are honestly
+  // identical today rather than a fabricated distinct metric.
+  const totalClients = allAggregates.length;
+  const activeClients = allAggregates.filter((c) => c.openReqs > 0).length;
+  const liveMedianValues = allAggregates
+    .filter((c) => c.verdict === "healthy" && c.medianDaysOpen !== undefined)
+    .map((c) => c.medianDaysOpen!);
+  const liveMedian = liveMedianValues.length > 0 ? median(liveMedianValues) : undefined;
+
+  if (selectedCompany) {
+    return (
+      <ClientDetail
+        company={selectedCompany}
+        opportunities={opportunities}
+        onBack={() => setSelectedCompany(null)}
+      />
+    );
   }
 
   return (
     <section aria-label="clients">
       <h2>Clients</h2>
 
-      {canManage ? (
-        <form onSubmit={handleSubmit} aria-label="create client">
-          <div>
-            <label htmlFor="client-name">Name</label>
-            <br />
-            <input
-              id="client-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="client-email">Contact email</label>
-            <br />
-            <input
-              id="client-email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor="client-phone">Contact phone</label>
-            <br />
-            <input
-              id="client-phone"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-            />
-          </div>
-          <button type="submit" disabled={submitting}>
-            {submitting ? "Adding..." : "Add client"}
-          </button>
-        </form>
-      ) : (
-        <p>Only recruiters and admins can add clients.</p>
-      )}
-      {formError && <p role="alert">{formError}</p>}
+      {opportunitiesState.status === "loading" && <p>Loading clients...</p>}
+      {opportunitiesState.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}
+      {opportunitiesState.status === "error" && <p>Could not load clients.</p>}
 
-      {state.status === "loading" && <p>Loading clients...</p>}
-      {state.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}
-      {state.status === "error" && <p>Could not load clients.</p>}
-      {state.status === "ok" && state.clients.length === 0 && <p>No clients yet.</p>}
-      {state.status === "ok" && state.clients.length > 0 && (
-        <ul aria-label="client list">
-          {state.clients.map((client) => (
-            <li key={client.id}>
-              <strong>{client.name}</strong>
-              {client.contactInfo && (client.contactInfo.email || client.contactInfo.phone) && (
-                <span>
-                  {" — "}
-                  {client.contactInfo.email}
-                  {client.contactInfo.email && client.contactInfo.phone && " · "}
-                  {client.contactInfo.phone}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
+      {opportunitiesState.status === "ok" && (
+        <>
+          <div className="client-kpi-strip">
+            <div className="opportunity-kpi-tile">
+              <div className="opportunity-kpi-label">Total clients</div>
+              <div className="opportunity-kpi-value">{totalClients}</div>
+            </div>
+            <div className="opportunity-kpi-tile">
+              <div className="opportunity-kpi-label">Active clients (open reqs)</div>
+              <div className="opportunity-kpi-value">{activeClients}</div>
+            </div>
+            <div className="opportunity-kpi-tile">
+              <div className="opportunity-kpi-label">Median days_open (live sources)</div>
+              <div className="opportunity-kpi-value opportunity-kpi-value--accent">{liveMedian ?? "—"}</div>
+            </div>
+          </div>
+
+          <div className="filterbar">
+            <select className="select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+              <option value={SORT_OPEN_REQS_DESC}>Sort · open reqs ↓</option>
+              <option value={SORT_MEDIAN_DESC}>Sort · median days_open ↓</option>
+            </select>
+            <label className="client-fixture-toggle">
+              <input
+                type="checkbox"
+                checked={showFixtures}
+                onChange={(e) => setShowFixtures(e.target.checked)}
+              />
+              Show fixture sources
+            </label>
+          </div>
+
+          {visibleAggregates.length === 0 && <p>No clients in the currently loaded data.</p>}
+
+          <div className="clientgrid">
+            {visibleAggregates.map((client) => (
+              <ClientCard
+                key={client.company}
+                client={client}
+                allClients={allAggregates}
+                onOpen={setSelectedCompany}
+              />
+            ))}
+          </div>
+
+          <p className="caption client-count-caption">
+            Showing {visibleAggregates.length} client{visibleAggregates.length === 1 ? "" : "s"} from{" "}
+            {opportunities.length} currently loaded opportunities. Counts reflect this loaded set, not a
+            separately tracked "closed requisition" status.
+          </p>
+        </>
       )}
     </section>
   );

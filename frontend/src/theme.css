@@ -479,6 +479,58 @@ hr{ border:none; border-top:1px solid var(--border); margin:1.1rem 0; }
 }
 .source-badge--live{ background:#e2f2ea; color:var(--success); }
 .source-badge--flag{ background:#fbe7e8; color:var(--danger); }
+.source-badge--fixture{ background:var(--surface-2); color:var(--mute); }
+
+/* ---- clients (S-25 redesign): shared bits with opportunity-* classes ---- */
+.filterbar{ display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center; margin:var(--space-3) 0; }
+.select{
+  background:var(--surface); color:var(--text); border:1px solid var(--border);
+  border-radius:8px; padding:.4em .7em; font-size:13px;
+}
+.caption{ font-size:12px; color:var(--mute); }
+
+.client-kpi-strip{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+  gap:var(--space-3); margin-bottom:var(--space-3);
+}
+.client-fixture-toggle{
+  display:inline-flex; align-items:center; gap:.4em; font-size:13px; color:var(--mute);
+}
+
+.clientgrid{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:var(--space-4);
+}
+.client-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  box-shadow:var(--shadow); padding:var(--space-4); cursor:pointer;
+  transition:box-shadow 200ms ease; text-align:left;
+}
+.client-card:hover, .client-card:focus-visible{ box-shadow:var(--shadow-hover); outline:none; }
+.client-card-header{ display:flex; align-items:center; gap:var(--space-3); margin-bottom:var(--space-3); }
+.client-card-header h4{ margin:0 0 4px; font-size:15px; }
+.client-card-pills{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:var(--space-2); }
+.client-card-why{ font-size:12.5px; color:var(--mute); margin:0; line-height:1.4; }
+.client-card-flag-note{
+  font-size:11.5px; font-weight:600; color:var(--danger); margin:var(--space-2) 0 0; cursor:help;
+}
+.client-count-caption{ margin-top:var(--space-3); }
+
+.client-back-link{
+  display:inline-flex; align-items:center; gap:.4em;
+  background:transparent; color:var(--accent); border:none; box-shadow:none;
+  font-size:13px; font-weight:600; padding:0; margin-bottom:var(--space-4); cursor:pointer;
+}
+.client-back-link:hover{ text-decoration:underline; background:transparent; transform:none; }
+.client-detail-header{ display:flex; align-items:center; gap:var(--space-3); margin-bottom:var(--space-3); }
+.client-detail-header h2{ margin:0 0 4px; border-bottom:none; padding-bottom:0; }
+.client-detail-monogram{ width:44px; height:44px; font-size:16px; }
+.client-detail-why{ font-size:14px; color:var(--mute); line-height:1.5; max-width:70ch; }
+.client-detail-kpi-row{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
+  gap:var(--space-3); margin:var(--space-4) 0;
+}
+.client-detail-count{ font-size:12px; color:var(--mute); margin:0 0 var(--space-3); }
+.opportunity-basis-dot--none::before{ background:var(--border); }
 
 /* ---- overview: S-25 "Top opportunities" panel ---- */
 .overview-top-opps{ margin-top:var(--space-4); }

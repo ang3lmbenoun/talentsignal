@@ -55,6 +55,11 @@ services:
     build:
       context: ./frontend
     restart: unless-stopped
+    environment:
+      # vite.config.ts defaults this to localhost:4000 for native `npm run
+      # dev` (no Docker); inside this Compose network the backend is only
+      # reachable by its service name.
+      VITE_DEV_API_PROXY_TARGET: http://backend:4000
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     depends_on:

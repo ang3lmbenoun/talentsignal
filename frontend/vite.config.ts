@@ -2,10 +2,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Docker networking note: the frontend and backend are separate containers.
-// The Vite dev server proxies /api/* to the backend service by its Compose
-// service name ("backend"), so the browser only ever talks to one origin
-// and never needs to know the backend's container hostname.
+// Docker networking note: inside docker-compose, the frontend and backend
+// are separate containers, and the Vite dev server proxies /api/* to the
+// backend by its Compose service name ("backend") -- docker-compose.yml
+// sets VITE_DEV_API_PROXY_TARGET=http://backend:4000 for exactly that case.
+// Running `npm run dev` natively (no Docker) has no such hostname to
+// resolve, so this defaults to localhost:4000 instead.
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -17,7 +19,7 @@ export default defineConfig({
       // built frontend with no Vite dev server, so nothing here can rely on
       // path rewriting to make routes line up.
       "/api": {
-        target: "http://backend:4000",
+        target: process.env.VITE_DEV_API_PROXY_TARGET ?? "http://localhost:4000",
         changeOrigin: true,
       },
     },
