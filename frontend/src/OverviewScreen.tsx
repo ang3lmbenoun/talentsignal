@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Users, Briefcase, Flame, Play, Clock, type LucideIcon } from "lucide-react";
+import { Building2, Users, Briefcase, Flame, Play, Clock, Radar, type LucideIcon } from "lucide-react";
 import { getStoredToken, getStoredRole, getStoredEmail } from "./auth";
 import { useOpportunitiesSummary } from "./hooks/useOpportunitiesSummary";
+import {
+  type BasisOpportunity,
+  summarizeBasis,
+  computeSourceHealth,
+  computeSignalInstanceCounts,
+} from "./lib/basisDerivation";
 
-interface Opportunity {
-  id: string;
-  source: string;
+interface Opportunity extends BasisOpportunity {
+  company: string;
   confidenceScore: number;
   hardToFillScore?: number;
   diffComputedAt: string | null;
@@ -60,10 +65,10 @@ function useListCount(path: string, listKey: string, enabled: boolean): CountSta
   return state;
 }
 
-// The opportunities fetch backs four different pieces of this screen (the
-// two opportunity tiles, the latest-ingestion card, the distribution donut)
-// -- one shared array-based state instead of useListCount, so it's fetched
-// once and every consumer derives from the same rows.
+// The opportunities fetch backs several pieces of this screen (KPI tiles,
+// basis distribution, story panel, donut, top opportunities) -- one shared
+// array-based state instead of useListCount, so it's fetched once and every
+// consumer derives from the same rows.
 type OpportunitiesState =
   | { status: "loading" }
   | { status: "ok"; opportunities: Opportunity[] }
@@ -115,64 +120,67 @@ function tileValue(state: CountState): string {
   return state.status === "ok" ? String(state.count) : state.status === "loading" ? "…" : "—";
 }
 
-// S-24 (Fix 2): secondary tiles are visually de-emphasized (smaller type,
-// muted icon) on purpose -- Ali's "too many numbers, not organized"
-// complaint was about every tile competing equally for attention. They
-// never carry a progress bar: none of clients/candidates/requisitions has a
-// natural "out of what" denominator, so fabricating one would be exactly the
-// invented-metric failure mode this pass exists to avoid.
-function StatTile({
-  label,
-  state,
+function loadingValue(status: "loading" | "unauthenticated" | "error"): string {
+  return status === "loading" ? "…" : "—";
+}
+
+// S-25: 4 equal-weight KPI tiles, each with a real number, a placeholder
+// sparkline (explicitly not data-bound -- no time-series history exists
+// yet), and a one-sentence plain-English "why" this number matters, per
+// the approved mockup (talentsignal-redesign.html, Screen 1 -- Overview).
+function KpiTile({
   icon: Icon,
   accentVar,
-  realBadge,
-  secondary,
+  value,
+  label,
+  why,
+  error,
 }: {
-  label: string;
-  state: CountState;
   icon: LucideIcon;
   accentVar: "--accent" | "--accent-2";
-  realBadge: string;
-  secondary?: boolean;
+  value: string;
+  label: string;
+  why: string;
+  error?: boolean;
 }) {
   return (
-    <div className={`stat-tile${secondary ? " stat-tile-secondary" : ""}`} role="group" aria-label={label}>
-      <div
-        className="stat-tile-icon"
-        style={{ background: secondary ? "var(--mute)" : `var(${accentVar})` }}
-      >
-        <Icon size={secondary ? 15 : 18} aria-hidden="true" />
+    <div className="kpi-tile" role="group" aria-label={label}>
+      <div className="kpi-tile-icon" style={{ background: `var(${accentVar})` }}>
+        <Icon size={18} aria-hidden="true" />
       </div>
-      <span className="stat-tile-value">{tileValue(state)}</span>
-      <span className="stat-tile-label">{label}</span>
-      {state.status === "ok" && <span className="stat-tile-real-badge">{realBadge}</span>}
-      {state.status === "error" && <span className="stat-tile-error">Could not load</span>}
+      <span className="kpi-tile-value mono">{value}</span>
+      <span className="kpi-tile-label">{label}</span>
+      {error && <span className="stat-tile-error">Could not load</span>}
+      <svg className="kpi-tile-sparkline" viewBox="0 0 100 24" role="img" aria-label="Trend placeholder, no history yet">
+        <path d="M0 18 L15 12 L30 15 L45 8 L60 12 L75 6 L100 10" fill="none" stroke="var(--border)" strokeWidth="2" />
+      </svg>
+      <p className="kpi-tile-caption">needs 4+ weeks of ingestion for a trend</p>
+      <p className="kpi-tile-why">{why}</p>
     </div>
   );
 }
 
 const BASIS_TIERS = [
-  { key: "measuredBasis" as const, label: "Measured", colorVar: "--success" },
-  { key: "curatedBasis" as const, label: "Curated", colorVar: "--accent" },
-  { key: "noBasis" as const, label: "No basis", colorVar: "--border" },
+  { key: "measured" as const, label: "Measured", colorVar: "--success" },
+  { key: "curated" as const, label: "Curated", colorVar: "--accent" },
+  { key: "none" as const, label: "No basis", colorVar: "--border" },
 ];
 
-// S-24 (Fix 3 groundwork / Fix 2): the measured/curated/no-basis split is
-// 06_decisions/046's real roleScarcity evidence tiers (measured = an
-// eligible Greenhouse family's actual median days-open; curated = the
-// decision-026 keyword fallback; no basis = neither, e.g. pre-S-23 rows) --
-// not a new taxonomy invented for this screen. Every number is
-// summary.total's own partition, so the three segments always add up to the
-// hero tile's own denominator.
-function BasisBar({ summary }: { summary: import("./hooks/useOpportunitiesSummary").OpportunitySummary }) {
+// 06_decisions/049: basis is now derived client-side (same derivation
+// SignalsScreen.tsx uses, from frontend/src/lib/basisDerivation.ts) instead
+// of trusting /api/opportunities/summary's measuredBasis/curatedBasis/
+// noBasis fields, which always read 0/0/total because production's
+// opportunities table was never rescored under S-23. Every number is
+// basisSummary.total's own partition, so the three segments always add up
+// to the loaded opportunity count.
+function BasisBar({ summary }: { summary: ReturnType<typeof summarizeBasis> }) {
   if (summary.total === 0) return null;
   return (
     <div className="stat-tile-stacked">
       <div
         className="stat-tile-stacked-track"
         role="img"
-        aria-label={`Scoring basis: ${summary.measuredBasis} measured, ${summary.curatedBasis} curated, ${summary.noBasis} no basis, out of ${summary.total} total`}
+        aria-label={`Scoring basis: ${summary.measured} measured, ${summary.curated} curated, ${summary.none} no basis, out of ${summary.total} total`}
       >
         {BASIS_TIERS.map((tier) => {
           const count = summary[tier.key];
@@ -228,6 +236,10 @@ interface Tier {
   label: string;
   count: number;
   colorVar: string;
+  // Plain-English reading of this tier, per 06_decisions/050 -- these
+  // callouts describe the existing confidenceScore cutoffs below, they do
+  // not change them.
+  callout: string;
 }
 
 const RADIUS = 60;
@@ -279,6 +291,89 @@ function DonutChart({ tiers }: { tiers: Tier[] }) {
   );
 }
 
+// S-25 "Story of this week": a 3-sentence narrative built entirely from
+// real client-side aggregations (source health, reposted/long-open counts,
+// the donut's own tier split) -- no invented numbers or company names. If
+// there isn't enough source diversity loaded yet to say anything real, it
+// renders nothing rather than a fabricated story.
+function StoryOfTheWeek({
+  sourceHealth,
+  signalCounts,
+  tiers,
+}: {
+  sourceHealth: ReturnType<typeof computeSourceHealth>;
+  signalCounts: ReturnType<typeof computeSignalInstanceCounts>;
+  tiers: Tier[];
+}) {
+  const healthy = sourceHealth.find((s) => s.verdict === "healthy");
+  const flagged = sourceHealth.find((s) => s.verdict === "flagged — excluded");
+  const tiersTotal = tiers.reduce((sum, t) => sum + t.count, 0);
+  const dominant = tiersTotal > 0 ? [...tiers].sort((a, b) => b.count - a.count)[0] : null;
+
+  if (!healthy && !flagged && !dominant) return null;
+
+  return (
+    <div className="overview-card overview-story">
+      <div className="overview-story-eyebrow">This week · story</div>
+      <p className="overview-story-body">
+        {healthy && (
+          <>
+            {healthy.source} shows {signalCounts.longOpen} long-open and {signalCounts.reposted} reposted
+            opportunit{signalCounts.reposted === 1 ? "y" : "ies"} in the currently loaded set.{" "}
+          </>
+        )}
+        {flagged && (
+          <>
+            {flagged.source}'s median is {flagged.medianDaysOpen} days and is flagged — excluded from measured
+            scarcity because it skews the view.{" "}
+          </>
+        )}
+        {dominant && (
+          <>
+            Most opportunities sit in the {dominant.label} band right now ({dominant.count} of {tiersTotal}), so
+            focus review time on the measured-basis subset.
+          </>
+        )}
+      </p>
+      <div className="overview-story-badges">
+        {healthy && <span className="source-badge source-badge--live">source live · {healthy.source}</span>}
+        {flagged && (
+          <span className="source-badge source-badge--flag">source flag · flagged — excluded · {flagged.source}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// S-25 "Top 3 opportunities": same ranking rule as 06_decisions/048's
+// top-pick heuristic (highest hardToFillScore in the currently-loaded
+// list, undefined-score rows ineligible), extended from top-1 to top-3.
+// The "why" per card reuses the opportunity's own real reason strings --
+// never invented prose.
+function TopOpportunities({ top3 }: { top3: Opportunity[] }) {
+  if (top3.length === 0) return null;
+  return (
+    <div className="overview-card overview-top-opps">
+      <h3>Top opportunities · ranked by hard-to-fill signal</h3>
+      <div className="top-opp-grid">
+        {top3.map((o) => {
+          const why = (o.hardToFillReasons?.length ? o.hardToFillReasons : o.reasons).slice(0, 2).join("; ");
+          return (
+            <div className="top-opp-card" key={o.id}>
+              <div className="top-opp-card-head">
+                <span className="top-opp-card-title">{o.title}</span>
+                <span className="top-opp-score-badge mono">{o.hardToFillScore!.toFixed(2)}</span>
+              </div>
+              <div className="top-opp-card-company">{o.company}</div>
+              {why && <p className="top-opp-card-why">{why}</p>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Overview: the default landing screen after login. Opportunities/
 // hard-to-fill/distribution/latest-ingestion are all gated to admin/sales
 // because GET /api/hidden-demand/opportunities itself is admin/sales-only
@@ -297,6 +392,9 @@ export function OverviewScreen() {
   // instead of the full opportunities array below, so they're no longer
   // recomputed by filtering hundreds/thousands of rows on every render (the
   // "Opportunities screen ... computes tile counts every render" complaint).
+  // Total/hardToFill/requisitionsIngested are still correct from this
+  // endpoint -- only the basis breakdown was wrong (06_decisions/049), and
+  // that's now derived client-side below instead.
   const summaryState = useOpportunitiesSummary(canSeeOpportunities);
 
   const opportunities = opportunitiesState.status === "ok" ? opportunitiesState.opportunities : [];
@@ -322,29 +420,54 @@ export function OverviewScreen() {
         ? summaryState
         : { status: "error" };
 
-  // The donut/ingestion cards below still need the full per-opportunity
-  // array (confidence tier, per-source, per-row diff timestamp -- none of
-  // that lives in the /summary aggregate), but there's no reason to re-run
-  // these four .filter()/.map() passes on a render this array didn't
-  // change for (e.g. the theme toggle) -- memoized on the array reference.
+  // The donut/basis/story/top-opps panels below all need the full
+  // per-opportunity array (confidence tier, per-source days-open, reasons,
+  // hard-to-fill score -- none of that lives in the /summary aggregate),
+  // but there's no reason to re-run these passes on a render this array
+  // didn't change for (e.g. the theme toggle) -- memoized on the array
+  // reference.
   const tiers: Tier[] = useMemo(
     () => [
-      { label: "Strong", count: opportunities.filter((o) => o.confidenceScore >= 0.7).length, colorVar: "--success" },
+      {
+        label: "Strong",
+        count: opportunities.filter((o) => o.confidenceScore >= 0.7).length,
+        colorVar: "--success",
+        callout: "act now",
+      },
       {
         label: "Good",
         count: opportunities.filter((o) => o.confidenceScore >= 0.5 && o.confidenceScore < 0.7).length,
         colorVar: "--accent",
+        callout: "strong signal",
       },
       {
         label: "Review",
         count: opportunities.filter((o) => o.confidenceScore >= 0.25 && o.confidenceScore < 0.5).length,
         colorVar: "--warning",
+        callout: "verify before acting",
       },
-      { label: "Poor", count: opportunities.filter((o) => o.confidenceScore < 0.25).length, colorVar: "--danger" },
+      {
+        label: "Poor",
+        count: opportunities.filter((o) => o.confidenceScore < 0.25).length,
+        colorVar: "--danger",
+        callout: "likely noise",
+      },
     ],
     [opportunities],
   );
   const tiersTotal = tiers.reduce((sum, t) => sum + t.count, 0);
+
+  const basisSummary = useMemo(() => summarizeBasis(opportunities), [opportunities]);
+  const signalCounts = useMemo(() => computeSignalInstanceCounts(opportunities), [opportunities]);
+  const sourceHealth = useMemo(() => computeSourceHealth(opportunities), [opportunities]);
+  const top3 = useMemo(
+    () =>
+      [...opportunities]
+        .filter((o): o is Opportunity & { hardToFillScore: number } => o.hardToFillScore !== undefined)
+        .sort((a, b) => b.hardToFillScore - a.hardToFillScore)
+        .slice(0, 3),
+    [opportunities],
+  );
 
   const sources = useMemo(() => [...new Set(opportunities.map((o) => o.source))].sort(), [opportunities]);
   const latestDiff = useMemo(
@@ -374,58 +497,68 @@ export function OverviewScreen() {
         </button>
       </div>
 
-      {/* S-24 (Fix 2): one dominant hero KPI instead of 4 equal-weight tiles
-          (Ali: "too many numbers, not organized"). Hard-to-fill count is the
-          number this whole app exists to surface, so it's the only one that
-          gets full-width treatment and a basis breakdown underneath. */}
+      {/* S-25: 4 equal-weight KPI tiles per the approved mockup -- replaces
+          the prior single dominant hero tile plus the Clients/Candidates
+          entries from the old secondary row (Requisitions Ingested stays
+          below as its own small tile; it isn't one of the mockup's 4). */}
       {canSeeOpportunities && (
-        <div className="stat-hero">
-          <div className="stat-tile stat-tile-hero" role="group" aria-label="Hard-to-fill opportunities">
-            <div className="stat-tile-icon" style={{ background: "var(--accent-2)" }}>
-              <Flame size={20} aria-hidden="true" />
+        <div className="kpi-grid">
+          <KpiTile
+            icon={Flame}
+            accentVar="--accent-2"
+            value={
+              hardToFillCount.status === "ok" && opportunitiesCount.status === "ok"
+                ? `${hardToFillCount.count}/${opportunitiesCount.count}`
+                : tileValue(hardToFillCount)
+            }
+            label="Hard-to-fill"
+            why="where your agency's revenue is hiding"
+            error={hardToFillCount.status === "error" || opportunitiesCount.status === "error"}
+          />
+          <KpiTile
+            icon={Radar}
+            accentVar="--accent"
+            value={opportunitiesState.status === "ok" ? String(signalCounts.total) : loadingValue(opportunitiesState.status)}
+            label="Total signals"
+            why="reposts, long-open, stale, no-salary, scarcity"
+            error={opportunitiesState.status === "error"}
+          />
+          <KpiTile
+            icon={Building2}
+            accentVar="--accent"
+            value={tileValue(clients)}
+            label="Active clients"
+            why="companies feeding requisitions"
+            error={clients.status === "error"}
+          />
+          <KpiTile
+            icon={Users}
+            accentVar="--accent-2"
+            value={tileValue(candidates)}
+            label="Candidates"
+            why="available to match"
+            error={candidates.status === "error"}
+          />
+        </div>
+      )}
+
+      {canSeeOpportunities && (
+        <div className="stat-grid stat-grid-secondary">
+          <div className="stat-tile stat-tile-secondary" role="group" aria-label="Requisitions Ingested">
+            <div className="stat-tile-icon" style={{ background: "var(--mute)" }}>
+              <Briefcase size={15} aria-hidden="true" />
             </div>
-            <span className="stat-tile-hero-value">
-              {hardToFillCount.status === "ok" && opportunitiesCount.status === "ok"
-                ? `${hardToFillCount.count} of ${opportunitiesCount.count}`
-                : tileValue(hardToFillCount)}
-            </span>
-            <span className="stat-tile-label">Hard-to-fill opportunities</span>
-            {(hardToFillCount.status === "error" || opportunitiesCount.status === "error") && (
-              <span className="stat-tile-error">Could not load</span>
-            )}
-            {summaryState.status === "ok" && <BasisBar summary={summaryState.summary} />}
+            <span className="stat-tile-value">{tileValue(requisitionsIngestedCount)}</span>
+            <span className="stat-tile-label">Requisitions Ingested</span>
+            {requisitionsIngestedCount.status === "ok" && <span className="stat-tile-real-badge">raw</span>}
+            {requisitionsIngestedCount.status === "error" && <span className="stat-tile-error">Could not load</span>}
           </div>
         </div>
       )}
 
-      <div className="stat-grid stat-grid-secondary">
-        <StatTile
-          label="Total Clients"
-          state={clients}
-          icon={Building2}
-          accentVar="--accent"
-          realBadge="in database"
-          secondary
-        />
-        <StatTile
-          label="Total Candidates"
-          state={candidates}
-          icon={Users}
-          accentVar="--accent-2"
-          realBadge="in database"
-          secondary
-        />
-        {canSeeOpportunities && (
-          <StatTile
-            label="Requisitions Ingested"
-            state={requisitionsIngestedCount}
-            icon={Briefcase}
-            accentVar="--accent"
-            realBadge="raw"
-            secondary
-          />
-        )}
-      </div>
+      {canSeeOpportunities && (
+        <StoryOfTheWeek sourceHealth={sourceHealth} signalCounts={signalCounts} tiers={tiers} />
+      )}
 
       {canSeeOpportunities && (
         <div className="overview-bottom">
@@ -464,14 +597,26 @@ export function OverviewScreen() {
                       <span className="donut-legend-count">
                         {tier.count} ({tiersTotal > 0 ? Math.round((tier.count / tiersTotal) * 100) : 0}%)
                       </span>
+                      <span className="donut-legend-callout">· {tier.callout}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
           </div>
+
+          <div className="overview-card overview-card-basis">
+            <h3>Basis distribution</h3>
+            <p className="overview-card-subhead">n={basisSummary.total} opportunities</p>
+            {opportunitiesState.status === "loading" && <p>Loading...</p>}
+            {opportunitiesState.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}
+            {opportunitiesState.status === "error" && <p>Could not load basis distribution.</p>}
+            {opportunitiesState.status === "ok" && <BasisBar summary={basisSummary} />}
+          </div>
         </div>
       )}
+
+      {canSeeOpportunities && opportunitiesState.status === "ok" && <TopOpportunities top3={top3} />}
     </section>
   );
 }
