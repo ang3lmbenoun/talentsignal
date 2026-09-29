@@ -47,6 +47,35 @@ describe("GET /api/analytics", () => {
     expect(res.body.demandScore.average).toBeCloseTo(0.8, 5);
   });
 
+  it("computes per-month time-to-hire and top clients by real placements (S-25)", async () => {
+    const { pool, seedAuditRow, seedClient } = createFakeAnalyticsPool();
+    seedClient({ id: "client-a", name: "Acme Corp" });
+    seedClient({ id: "client-b", name: "Beta Inc" });
+
+    seedAuditRow({ clientId: "client-a", fromStage: null, toStage: "prospecting", changedAt: "2026-01-05T00:00:00Z" });
+    seedAuditRow({ clientId: "client-a", fromStage: "prospecting", toStage: "closed", changedAt: "2026-01-20T00:00:00Z" });
+
+    seedAuditRow({ clientId: "client-b", fromStage: null, toStage: "prospecting", changedAt: "2026-01-01T00:00:00Z" });
+    seedAuditRow({ clientId: "client-b", fromStage: "prospecting", toStage: "closed", changedAt: "2026-01-11T00:00:00Z" });
+    seedAuditRow({ clientId: "client-b", fromStage: "closed", toStage: "negotiation", changedAt: "2026-02-01T00:00:00Z" });
+    seedAuditRow({ clientId: "client-b", fromStage: "negotiation", toStage: "closed", changedAt: "2026-02-15T00:00:00Z" });
+
+    const app = createApp(pool, noopProvider);
+    const res = await request(app).get("/api/analytics").set("Authorization", salesAuthHeader());
+
+    expect(res.status).toBe(200);
+    // Jan: client-a 15 days + client-b 10 days, averaged -> 12.5.
+    expect(res.body.timeToHirePerMonth).toEqual([
+      { month: "2026-01", averageDays: 12.5, sampleSize: 2 },
+      { month: "2026-02", averageDays: 45, sampleSize: 1 },
+    ]);
+    // client-b closed twice, client-a once — ranked by real placement count.
+    expect(res.body.topClientsByPlacements).toEqual([
+      { clientId: "client-b", clientName: "Beta Inc", count: 2 },
+      { clientId: "client-a", clientName: "Acme Corp", count: 1 },
+    ]);
+  });
+
   it("rejects an unauthenticated request", async () => {
     const { pool } = createFakeAnalyticsPool();
     const app = createApp(pool, noopProvider);
