@@ -462,6 +462,28 @@ hr{ border:none; border-top:1px solid var(--border); margin:1.1rem 0; }
   padding-left:.6em; border-left:2px solid var(--accent-soft);
 }
 
+/* ---- overview: S-29 fit-scoring KPI tiles ---- */
+.kpi-tile-basis-pill{
+  display:inline-block; align-self:flex-start; margin-top:var(--space-2);
+  font-size:10.5px; font-weight:600; color:var(--mute);
+  background:var(--surface-2); border:1px solid var(--border); border-radius:999px;
+  padding:.15em .6em;
+}
+.kpi-tile-histogram{
+  display:flex; align-items:flex-end; gap:4px; width:100%; height:24px; margin-top:var(--space-3);
+}
+.kpi-tile-histogram-bar{
+  display:block; flex:1; min-width:4px; background:var(--border); border-radius:2px 2px 0 0;
+}
+.kpi-tile-histogram-bar--highlight{ background:var(--accent); }
+
+.overview-card-fit-distribution{ margin-bottom:var(--space-4); }
+.fit-distribution-legend{ list-style:none; margin:var(--space-3) 0 0; padding:0; display:flex; flex-direction:column; gap:var(--space-2); }
+.fit-distribution-legend li{ display:flex; align-items:center; gap:var(--space-2); font-size:12.5px; }
+.fit-distribution-bucket-label{ font-weight:600; min-width:90px; }
+.fit-distribution-bucket-count{ color:var(--text); min-width:28px; text-align:right; }
+.fit-distribution-bucket-meaning{ color:var(--mute); }
+
 /* ---- overview: S-25 "Story of this week" panel ---- */
 .overview-story{
   margin-bottom:var(--space-4);

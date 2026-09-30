@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Users, Briefcase, Flame, Play, Clock, Radar, type LucideIcon } from "lucide-react";
+import { Building2, Users, Briefcase, Flame, Play, Clock, Radar, Target, AlertTriangle, type LucideIcon } from "lucide-react";
 import { getStoredToken, getStoredRole, getStoredEmail } from "./auth";
 import { useOpportunitiesSummary } from "./hooks/useOpportunitiesSummary";
 import {
@@ -135,13 +135,21 @@ function KpiTile({
   label,
   why,
   error,
+  basisPill,
+  children,
 }: {
   icon: LucideIcon;
-  accentVar: "--accent" | "--accent-2";
+  accentVar: "--accent" | "--accent-2" | "--success" | "--warning";
   value: string;
   label: string;
   why: string;
   error?: boolean;
+  // S-29: real n= disclosure for a KPI that isn't grounded in every
+  // loaded opportunity (e.g. fit scoring only covers reqs with a real
+  // requirements match) -- same "never hide what's unverified" pill
+  // convention opportunity-basis-dot already established.
+  basisPill?: string;
+  children?: React.ReactNode;
 }) {
   return (
     <div className="kpi-tile" role="group" aria-label={label}>
@@ -151,11 +159,46 @@ function KpiTile({
       <span className="kpi-tile-value mono">{value}</span>
       <span className="kpi-tile-label">{label}</span>
       {error && <span className="stat-tile-error">Could not load</span>}
-      <svg className="kpi-tile-sparkline" viewBox="0 0 100 24" role="img" aria-label="Trend placeholder, no history yet">
-        <path d="M0 18 L15 12 L30 15 L45 8 L60 12 L75 6 L100 10" fill="none" stroke="var(--border)" strokeWidth="2" />
-      </svg>
+      {children ?? (
+        <svg className="kpi-tile-sparkline" viewBox="0 0 100 24" role="img" aria-label="Trend placeholder, no history yet">
+          <path d="M0 18 L15 12 L30 15 L45 8 L60 12 L75 6 L100 10" fill="none" stroke="var(--border)" strokeWidth="2" />
+        </svg>
+      )}
+      {basisPill && <span className="kpi-tile-basis-pill">{basisPill}</span>}
       <p className="kpi-tile-caption">needs 4+ weeks of ingestion for a trend</p>
       <p className="kpi-tile-why">{why}</p>
+    </div>
+  );
+}
+
+// S-29: real bucket counts from /api/fits/summary, rendered as a tiny
+// 4-bar histogram (insufficient_data excluded -- it isn't a score band) --
+// explicitly real, not the placeholder sparkline every other tile shows,
+// since this data already exists per-request.
+function FitBucketMiniHistogram({
+  distribution,
+  highlight,
+}: {
+  distribution: FitDistribution;
+  highlight: keyof FitDistribution;
+}) {
+  const bars: { key: keyof FitDistribution; count: number }[] = [
+    { key: "ge85", count: distribution.ge85 },
+    { key: "b70_84", count: distribution.b70_84 },
+    { key: "b60_69", count: distribution.b60_69 },
+    { key: "lt60", count: distribution.lt60 },
+  ];
+  const max = Math.max(...bars.map((b) => b.count), 1);
+  return (
+    <div className="kpi-tile-histogram" role="img" aria-label="Fit score bucket distribution, this bucket highlighted">
+      {bars.map((b) => (
+        <span
+          key={b.key}
+          className={`kpi-tile-histogram-bar${b.key === highlight ? " kpi-tile-histogram-bar--highlight" : ""}`}
+          style={{ height: `${(b.count / max) * 100}%` }}
+          title={`${b.key}: ${b.count}`}
+        />
+      ))}
     </div>
   );
 }
@@ -374,6 +417,122 @@ function TopOpportunities({ top3 }: { top3: Opportunity[] }) {
   );
 }
 
+// S-29: fit-scoring summary (S-28's GET /api/fits/summary). A fourth,
+// independent fetch/state machine, same "never block the rest of the
+// screen" reasoning every other Overview fetch already follows -- a slow
+// or failed fit summary must not stop the opportunity KPIs above it from
+// rendering.
+interface FitDistribution {
+  ge85: number;
+  b70_84: number;
+  b60_69: number;
+  lt60: number;
+  insufficient_data: number;
+}
+
+interface FitsSummary {
+  totalOpportunities: number;
+  totalCandidates: number;
+  avgFitScore: number | null;
+  measuredCount: number;
+  distribution: FitDistribution;
+}
+
+type FitsSummaryState =
+  | { status: "loading" }
+  | { status: "ok"; summary: FitsSummary }
+  | { status: "unauthenticated" }
+  | { status: "error" };
+
+function useFitsSummary(enabled: boolean): FitsSummaryState {
+  const [state, setState] = useState<FitsSummaryState>({ status: "loading" });
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    const token = getStoredToken();
+    if (!token) {
+      setState({ status: "unauthenticated" });
+      return;
+    }
+
+    fetch("/api/fits/summary", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => {
+        if (res.status === 401) throw new Error("unauthenticated");
+        if (!res.ok) throw new Error(`fits summary fetch failed: ${res.status}`);
+        return res.json() as Promise<FitsSummary>;
+      })
+      .then((summary) => {
+        if (!cancelled) setState({ status: "ok", summary });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setState(
+          err instanceof Error && err.message === "unauthenticated"
+            ? { status: "unauthenticated" }
+            : { status: "error" },
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  return state;
+}
+
+const FIT_BUCKET_MEANINGS: { key: keyof FitDistribution; label: string; colorVar: string; meaning: string }[] = [
+  { key: "ge85", label: "≥85%", colorVar: "--success", meaning: "Strong match — send outreach" },
+  { key: "b70_84", label: "70–84%", colorVar: "--accent", meaning: "Needs review" },
+  { key: "b60_69", label: "60–69%", colorVar: "--warning", meaning: "Loosen JD or add candidates" },
+  { key: "lt60", label: "<60%", colorVar: "--danger", meaning: "No overlap yet" },
+  { key: "insufficient_data", label: "insufficient data", colorVar: "--border", meaning: "Candidate data insufficient" },
+];
+
+// S-29 "Fit distribution" panel: one real bucket count per opportunity
+// (its single best-matching candidate's fit score, per 06_decisions/056),
+// as a stacked bar plus a labeled row per bucket with a one-sentence plain-
+// English reading. Real basis pill: how many of the total opportunities
+// this distribution actually covers (insufficient_data is a real, counted
+// outcome, not hidden).
+function FitDistributionPanel({ summary }: { summary: FitsSummary }) {
+  const total = summary.totalOpportunities;
+  if (total === 0) return null;
+
+  return (
+    <div className="overview-card overview-card-fit-distribution">
+      <h3>Fit distribution</h3>
+      <p className="overview-card-subhead">
+        n={total} opportunities · basis: {summary.measuredCount} measured, {total - summary.measuredCount} insufficient data
+      </p>
+      <div className="stat-tile-stacked-track" role="img" aria-label="Fit score distribution across all loaded opportunities">
+        {FIT_BUCKET_MEANINGS.map((bucket) => {
+          const count = summary.distribution[bucket.key];
+          if (count === 0) return null;
+          return (
+            <div
+              key={bucket.key}
+              className="stat-tile-stacked-seg"
+              style={{ width: `${(count / total) * 100}%`, background: `var(${bucket.colorVar})` }}
+            />
+          );
+        })}
+      </div>
+      <ul className="fit-distribution-legend">
+        {FIT_BUCKET_MEANINGS.map((bucket) => (
+          <li key={bucket.key}>
+            <span className="stat-tile-stacked-legend-swatch" style={{ background: `var(${bucket.colorVar})` }} />
+            <span className="fit-distribution-bucket-label">{bucket.label}</span>
+            <span className="fit-distribution-bucket-count mono">{summary.distribution[bucket.key]}</span>
+            <span className="fit-distribution-bucket-meaning">{bucket.meaning}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // Overview: the default landing screen after login. Opportunities/
 // hard-to-fill/distribution/latest-ingestion are all gated to admin/sales
 // because GET /api/hidden-demand/opportunities itself is admin/sales-only
@@ -396,6 +555,7 @@ export function OverviewScreen() {
   // endpoint -- only the basis breakdown was wrong (06_decisions/049), and
   // that's now derived client-side below instead.
   const summaryState = useOpportunitiesSummary(canSeeOpportunities);
+  const fitsSummaryState = useFitsSummary(canSeeOpportunities);
 
   const opportunities = opportunitiesState.status === "ok" ? opportunitiesState.opportunities : [];
   const opportunitiesCount: CountState =
@@ -539,7 +699,89 @@ export function OverviewScreen() {
             why="available to match"
             error={candidates.status === "error"}
           />
+
+          {/* S-29: 3 new fit-scoring KPI tiles (S-28's /api/fits/summary),
+              bringing the grid to 7 -- kept alongside the original 4 rather
+              than replacing any of them, since each already carries real,
+              independently useful data and 7 tiles still wraps cleanly on
+              the existing responsive grid. */}
+          {fitsSummaryState.status === "ok" && (
+            <KpiTile
+              icon={Target}
+              accentVar="--accent"
+              value={
+                fitsSummaryState.summary.avgFitScore === null
+                  ? "—"
+                  : `${Math.round(fitsSummaryState.summary.avgFitScore * 100)}%`
+              }
+              label="Avg candidate fit"
+              why={`across ${fitsSummaryState.summary.measuredCount} reqs · ${fitsSummaryState.summary.totalCandidates} candidates`}
+              basisPill={`n=${fitsSummaryState.summary.measuredCount} of ${fitsSummaryState.summary.totalOpportunities} reqs have measured fit data`}
+            />
+          )}
+          {fitsSummaryState.status !== "ok" && (
+            <KpiTile
+              icon={Target}
+              accentVar="--accent"
+              value={loadingValue(fitsSummaryState.status)}
+              label="Avg candidate fit"
+              why="across reqs with measured fit data"
+              error={fitsSummaryState.status === "error"}
+            />
+          )}
+
+          {fitsSummaryState.status === "ok" && (
+            <KpiTile
+              icon={Target}
+              accentVar="--success"
+              value={String(fitsSummaryState.summary.distribution.ge85)}
+              label="Reqs with strong candidates (≥85%)"
+              why="ready for outreach right now"
+              basisPill={`n=${fitsSummaryState.summary.totalOpportunities} reqs scored`}
+            >
+              <FitBucketMiniHistogram distribution={fitsSummaryState.summary.distribution} highlight="ge85" />
+            </KpiTile>
+          )}
+          {fitsSummaryState.status !== "ok" && (
+            <KpiTile
+              icon={Target}
+              accentVar="--success"
+              value={loadingValue(fitsSummaryState.status)}
+              label="Reqs with strong candidates (≥85%)"
+              why="ready for outreach right now"
+              error={fitsSummaryState.status === "error"}
+            />
+          )}
+
+          {fitsSummaryState.status === "ok" && (
+            <KpiTile
+              icon={AlertTriangle}
+              accentVar="--warning"
+              value={String(
+                fitsSummaryState.summary.distribution.b60_69 + fitsSummaryState.summary.distribution.lt60,
+              )}
+              label="Reqs needing attention (<70%)"
+              why="Ali wants you to look here"
+              basisPill={`n=${fitsSummaryState.summary.totalOpportunities} reqs scored`}
+            >
+              <FitBucketMiniHistogram distribution={fitsSummaryState.summary.distribution} highlight="lt60" />
+            </KpiTile>
+          )}
+          {fitsSummaryState.status !== "ok" && (
+            <KpiTile
+              icon={AlertTriangle}
+              accentVar="--warning"
+              value={loadingValue(fitsSummaryState.status)}
+              label="Reqs needing attention (<70%)"
+              why="Ali wants you to look here"
+              error={fitsSummaryState.status === "error"}
+            />
+          )}
         </div>
+      )}
+
+      {canSeeOpportunities && fitsSummaryState.status === "ok" && (
+        <FitDistributionPanel summary={fitsSummaryState.summary} />
       )}
 
       {canSeeOpportunities && (
