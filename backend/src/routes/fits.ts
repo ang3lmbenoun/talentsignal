@@ -7,13 +7,15 @@ import { requirementsForTitle } from "../matching/roleSkillsConfig";
 import { classifyFamily } from "../scoring/hardToFillScore";
 import { computeFitScore, type FitOpportunityInput, type FitCandidateInput, type FitResult } from "../matching/fitScore";
 
-interface OpportunityRow {
+// Exported for reuse by recommendations.ts's route (S-30a) -- same real
+// opportunity/candidate row shapes, no second copy.
+export interface OpportunityRow {
   id: string;
   title: string;
   family_key: string | null;
 }
 
-interface CandidateRow {
+export interface CandidateRow {
   id: string;
   name: string;
   skills: string[];
@@ -40,7 +42,7 @@ function parseLimit(raw: unknown): number {
 // anywhere in this schema today, so it's always null here -- fitScore.ts
 // renormalizes its weight away rather than faking a number. See
 // 06_decisions/056.
-function toFitOpportunityInput(row: OpportunityRow): FitOpportunityInput {
+export function toFitOpportunityInput(row: OpportunityRow): FitOpportunityInput {
   const { requirements } = requirementsForTitle(row.title);
   return {
     requiredSkills: requirements,
@@ -49,7 +51,7 @@ function toFitOpportunityInput(row: OpportunityRow): FitOpportunityInput {
   };
 }
 
-function toFitCandidateInput(row: CandidateRow): FitCandidateInput {
+export function toFitCandidateInput(row: CandidateRow): FitCandidateInput {
   return {
     skills: row.skills,
     yearsExperience: row.experience,
