@@ -1008,6 +1008,20 @@ ul.opportunities-grid{
 .barline{ height:7px; border-radius:9px; background:var(--surface-2); overflow:hidden; }
 .barline i{ display:block; height:100%; background:var(--accent); border-radius:9px; }
 
+/* ---- opportunities: company-grouped landing (S-26) ---- */
+.opportunity-company-rows{ list-style:none; margin:0 0 var(--space-4); padding:0; display:flex; flex-direction:column; gap:var(--space-3); }
+.opportunity-company-row{
+  display:flex; align-items:flex-start; gap:var(--space-3);
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  box-shadow:var(--shadow); padding:var(--space-4); cursor:pointer;
+  transition:box-shadow 200ms ease;
+}
+.opportunity-company-row:hover, .opportunity-company-row:focus-visible{ box-shadow:var(--shadow-hover); outline:none; }
+.opportunity-company-row-main{ flex:1; min-width:0; }
+.opportunity-company-row-head{ display:flex; align-items:center; gap:var(--space-2); margin-bottom:var(--space-2); }
+.opportunity-company-row-head h3{ margin:0; font-size:15px; }
+.opportunity-company-row-arrow{ color:var(--mute); font-size:18px; align-self:center; }
+
 /* ---- scrollbar ---- */
 *::-webkit-scrollbar{ width:11px; height:11px; }
 *::-webkit-scrollbar-track{ background:var(--bg); }

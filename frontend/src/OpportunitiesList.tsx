@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Briefcase, Flame, Building2, Users, type LucideIcon } from "lucide-react";
+import { Briefcase, Flame, Building2, Users, ArrowLeft, type LucideIcon } from "lucide-react";
 import { getStoredToken } from "./auth";
 import { classifyFamily } from "./lib/basisDerivation";
+import { computeClientAggregates, clientWhyItMatters, type ClientOpportunity } from "./lib/clientAggregation";
 
 interface ScoreFactor {
   factor: string;
@@ -589,6 +590,119 @@ function OpportunityCard({
   );
 }
 
+// S-26: default landing view, one summary row per client company instead of
+// a flat card grid — fixes Ali's "GitLab GitLab GitLab" complaint (a company
+// with many open reqs used to render as that many near-identical cards, all
+// headed with the same name, before a user could filter). Reuses the exact
+// per-company aggregation already built for the Clients screen
+// (frontend/src/lib/clientAggregation.ts) rather than a second
+// implementation — same real openReqs/medianDaysOpen/hardToFillCount/
+// basis/verdict numbers either screen would compute from the same data.
+// See 06_decisions/054.
+function CompanyRow({
+  aggregate,
+  allAggregates,
+  chips,
+  onOpen,
+}: {
+  aggregate: ReturnType<typeof computeClientAggregates>[number];
+  allAggregates: ReturnType<typeof computeClientAggregates>;
+  chips: { label: string; count: number }[];
+  onOpen: (company: string) => void;
+}) {
+  const monogram = companyMonogram(aggregate.company);
+  const verdictClass =
+    aggregate.verdict === "healthy" ? "live" : aggregate.verdict === "fixture" ? "fixture" : "flag";
+
+  return (
+    <li
+      className="opportunity-company-row"
+      tabIndex={0}
+      role="button"
+      aria-label={`Open ${aggregate.company}`}
+      onClick={() => onOpen(aggregate.company)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onOpen(aggregate.company);
+      }}
+    >
+      <span className="opportunity-monogram" style={{ background: monogram.color }}>
+        {monogram.initials}
+      </span>
+      <div className="opportunity-company-row-main">
+        <div className="opportunity-company-row-head">
+          <h3>{aggregate.company}</h3>
+          <span className={`source-badge source-badge--${verdictClass}`}>{aggregate.verdict}</span>
+        </div>
+        <div className="row package-signal-strip">
+          <span className="opportunity-pill">Open reqs · {aggregate.openReqs}</span>
+          <span className="opportunity-pill">Median · {aggregate.medianDaysOpen ?? "—"}d</span>
+          <span className="opportunity-pill">Hard-to-fill · {aggregate.hardToFillCount}</span>
+          {chips.map((chip) => (
+            <span className="opportunity-pill" key={chip.label}>
+              {chip.label} · {chip.count}
+            </span>
+          ))}
+        </div>
+        <p className="client-card-why">{clientWhyItMatters(aggregate, allAggregates)}</p>
+      </div>
+      <span className="opportunity-company-row-arrow" aria-hidden="true">
+        →
+      </span>
+    </li>
+  );
+}
+
+function CompanyGroupedLanding({
+  opportunities,
+  onOpenCompany,
+  onViewAll,
+}: {
+  opportunities: Opportunity[];
+  onOpenCompany: (company: string) => void;
+  onViewAll: () => void;
+}) {
+  const clientOpps: ClientOpportunity[] = opportunities.map((o) => ({ ...o, title: o.title ?? "" }));
+  const aggregates = computeClientAggregates(clientOpps).sort((a, b) => b.openReqs - a.openReqs);
+
+  const rowsByCompany = new Map<string, Opportunity[]>();
+  for (const o of opportunities) {
+    if (!rowsByCompany.has(o.company)) rowsByCompany.set(o.company, []);
+    rowsByCompany.get(o.company)?.push(o);
+  }
+
+  return (
+    <>
+      <div className="between">
+        <p className="caption">
+          {aggregates.length} compan{aggregates.length === 1 ? "y" : "ies"} feeding {opportunities.length} loaded
+          opportunities.
+        </p>
+        <button type="button" className="btn" onClick={onViewAll}>
+          View all opportunities (flat grid)
+        </button>
+      </div>
+      <ul aria-label="opportunities by company" className="opportunity-company-rows">
+        {aggregates.map((aggregate) => {
+          const rows = rowsByCompany.get(aggregate.company) ?? [];
+          const chips = SIGNAL_TYPE_OPTIONS.map((sig) => ({
+            label: sig.label,
+            count: rows.filter((o) => sig.test(o)).length,
+          })).filter((c) => c.count > 0);
+          return (
+            <CompanyRow
+              key={aggregate.company}
+              aggregate={aggregate}
+              allAggregates={aggregates}
+              chips={chips}
+              onOpen={onOpenCompany}
+            />
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
 export function OpportunitiesList() {
   const [state, setState] = useState<OpportunitiesState>({ status: "loading" });
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -598,6 +712,10 @@ export function OpportunitiesList() {
   // as a guessed/sample number.
   const [clientCount, setClientCount] = useState<number | undefined>(undefined);
   const [candidateCount, setCandidateCount] = useState<number | undefined>(undefined);
+  // S-26: default landing is the company-grouped summary, not the flat
+  // grid — "grid" is reached either by opening a company row (which also
+  // sets companyFilter) or by the explicit "view all" escape hatch.
+  const [view, setView] = useState<"grouped" | "grid">("grouped");
   const [companyFilter, setCompanyFilter] = useState(ALL_FILTER);
   const [familyFilter, setFamilyFilter] = useState(ALL_FILTER);
   const [signalFilter, setSignalFilter] = useState(ALL_FILTER);
@@ -719,6 +837,27 @@ export function OpportunitiesList() {
         <KpiTile label="Total candidates" value={candidateCount} icon={Users} />
       </div>
 
+      {view === "grouped" && (
+        <CompanyGroupedLanding
+          opportunities={allOpportunities}
+          onOpenCompany={(company) => {
+            setCompanyFilter(company);
+            setView("grid");
+            setVisibleCount(PAGE_SIZE);
+          }}
+          onViewAll={() => {
+            setCompanyFilter(ALL_FILTER);
+            setView("grid");
+            setVisibleCount(PAGE_SIZE);
+          }}
+        />
+      )}
+
+      {view === "grid" && (
+        <>
+      <button type="button" className="client-back-link" onClick={() => setView("grouped")}>
+        <ArrowLeft size={14} aria-hidden="true" /> Back to companies
+      </button>
       <div className="filterbar">
         <select className="select" value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setVisibleCount(PAGE_SIZE); }}>
           <option value={ALL_FILTER}>All client companies</option>
@@ -774,6 +913,8 @@ export function OpportunitiesList() {
         >
           Load more ({visibleCount} of {filteredOpportunities.length})
         </button>
+      )}
+        </>
       )}
     </>
   );

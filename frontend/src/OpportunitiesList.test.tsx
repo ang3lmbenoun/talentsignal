@@ -2,6 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { OpportunitiesList } from "./OpportunitiesList";
 
+// S-26: the default landing view is now the company-grouped summary, not
+// the flat card grid (fixes Ali's "GitLab GitLab GitLab" complaint) — every
+// test below that asserts on individual card content needs to first reach
+// the grid view via the "view all" escape hatch, same as a real user would.
+async function goToGrid() {
+  const viewAllButton = await screen.findByRole("button", { name: "View all opportunities (flat grid)" });
+  fireEvent.click(viewAllButton);
+}
+
 const OPPORTUNITY = {
   id: "opp-1",
   company: "Acme Corp",
@@ -51,6 +60,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
     const item = screen.getByRole("heading", { name: "Acme Corp" }).closest("li");
@@ -78,6 +88,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "High Co" })).toBeInTheDocument());
     const items = screen.getAllByRole("listitem");
@@ -109,6 +120,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
     const item = screen.getByRole("heading", { name: "Acme Corp" }).closest("li");
@@ -131,10 +143,47 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
     const item = screen.getByRole("heading", { name: "Acme Corp" }).closest("li");
     expect(item).toHaveTextContent("No factor breakdown recorded (scored before S-07).");
+  });
+
+  it("S-26: defaults to a company-grouped landing view (one row per company, not one card per opportunity)", async () => {
+    localStorage.setItem("ts_token", "fake-token");
+    const gitlabOne = { ...OPPORTUNITY, id: "opp-1", company: "GitLab" };
+    const gitlabTwo = { ...OPPORTUNITY, id: "opp-2", company: "GitLab" };
+    const gitlabThree = { ...OPPORTUNITY, id: "opp-3", company: "GitLab" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ opportunities: [gitlabOne, gitlabTwo, gitlabThree] }),
+      }),
+    );
+
+    render(<OpportunitiesList />);
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "GitLab" })).toBeInTheDocument());
+    // Exactly one "GitLab" heading, not three — the "GitLab GitLab GitLab"
+    // complaint this redesign exists to fix.
+    expect(screen.getAllByRole("heading", { name: "GitLab" })).toHaveLength(1);
+    expect(screen.getByText("Open reqs · 3")).toBeInTheDocument();
+    // The flat card grid (rank badges, "Show raw payload") isn't rendered
+    // in the default view at all.
+    expect(screen.queryByText("#1")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show raw payload" })).not.toBeInTheDocument();
+
+    // Clicking the company row reaches the existing flat grid, filtered to it.
+    fireEvent.click(screen.getByRole("button", { name: "Open GitLab" }));
+    await waitFor(() => expect(screen.getByText("#1")).toBeInTheDocument());
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+
+    // "Back to companies" returns to the grouped landing.
+    fireEvent.click(screen.getByRole("button", { name: "Back to companies" }));
+    await waitFor(() => expect(screen.getByText("Open reqs · 3")).toBeInTheDocument());
   });
 
   it("shows an unauthenticated message when the stored token is rejected", async () => {
@@ -172,6 +221,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Insight Analytics" })).toBeInTheDocument());
     const item = screen.getByRole("heading", { name: "Insight Analytics" }).closest("li");
@@ -191,6 +241,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
     const item = screen.getByRole("heading", { name: "Acme Corp" }).closest("li");
@@ -209,6 +260,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Insight Analytics" })).toBeInTheDocument());
     const item = screen.getByRole("heading", { name: "Insight Analytics" }).closest("li");
@@ -247,6 +299,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Insight Analytics" })).toBeInTheDocument());
     const item = screen.getByRole("heading", { name: "Insight Analytics" }).closest("li");
@@ -289,6 +342,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Insight Analytics" })).toBeInTheDocument());
     const item = screen.getByRole("heading", { name: "Insight Analytics" }).closest("li");
@@ -319,6 +373,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
     expect(scoreFetch).not.toHaveBeenCalled();
@@ -348,6 +403,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Acme Corp" })).toBeInTheDocument());
     const item = screen.getByRole("heading", { name: "Acme Corp" }).closest("li") as HTMLElement;
@@ -393,6 +449,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "GitLab" })).toBeInTheDocument());
     const item = screen.getByRole("heading", { name: "GitLab" }).closest("li") as HTMLElement;
@@ -438,6 +495,7 @@ describe("OpportunitiesList", () => {
     );
 
     render(<OpportunitiesList />);
+    await goToGrid();
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "GitLab" })).toBeInTheDocument());
     const item = screen.getByRole("heading", { name: "GitLab" }).closest("li") as HTMLElement;
