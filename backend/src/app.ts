@@ -23,6 +23,7 @@ import { predictiveAnalysisRouter } from "./routes/predictiveAnalysis";
 import { privacyRouter } from "./routes/privacy";
 import { crmWriteRouter } from "./routes/crmWrite";
 import { revenueAnomaliesRouter } from "./routes/revenueAnomalies";
+import { fitsRouter } from "./routes/fits";
 import type { MarketSignalProvider } from "./adapters/marketSignalProvider";
 import { LoggingPipelineNotifier, type PipelineNotifier } from "./adapters/pipelineNotifier";
 
@@ -70,6 +71,7 @@ export function createApp(
   app.use("/api", privacyRouter(pool));
   app.use("/api", crmWriteRouter(pool));
   app.use("/api", revenueAnomaliesRouter(pool));
+  app.use("/api", fitsRouter(pool));
 
   // The built frontend (decision 037: one Render service, not a separate
   // Static Site) lives alongside dist/ inside the container image — see the
