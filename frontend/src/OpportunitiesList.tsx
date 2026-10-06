@@ -50,6 +50,12 @@ interface Opportunity {
   // exposed by the backend for the first time this story. Null on rows
   // classifyFamily() has never run against (not yet backfilled).
   familyKey?: string | null;
+  // S-30b: the JD editor's real stored values (migration 022), null until a
+  // human edits via PATCH /api/opportunities/:id. Optional only because
+  // rows scored before S-30b's list-response change predate this field
+  // existing in the fetch response -- treated as "never edited" either way.
+  requiredSkills?: string[] | null;
+  requiredYears?: number | null;
 }
 
 type OpportunitiesState =
@@ -359,6 +365,220 @@ function KpiTile({
   );
 }
 
+// S-30b: S-30a's backend recommendation engine
+// (GET /api/opportunities/:id/recommendation) returns exactly these four
+// kinds -- mirrors backend/src/matching/recommendations.ts's
+// RecommendationKind type so this screen can never drift from what the
+// backend actually sends.
+type RecommendationKind = "loosen_years" | "loosen_skills" | "add_candidates" | "no_action";
+
+interface RecommendationData {
+  opportunityId: string;
+  kind: RecommendationKind;
+  message: string;
+  suggestedEdits: Record<string, unknown> | null;
+}
+
+type RecommendationState =
+  | { status: "loading" }
+  | { status: "ok"; recommendation: RecommendationData }
+  | { status: "error" };
+
+// refreshKey is bumped after a JD save so the panel re-fetches and the
+// recommendation recomputes against the newly saved required_skills/
+// required_years -- the task's own "after save, the recommendation
+// re-computes and the panel updates" requirement.
+function useRecommendation(opportunityId: string, refreshKey: number): RecommendationState {
+  const [state, setState] = useState<RecommendationState>({ status: "loading" });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ status: "loading" });
+    const token = getStoredToken();
+    if (!token) {
+      setState({ status: "error" });
+      return;
+    }
+
+    fetch(`/api/opportunities/${opportunityId}/recommendation`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`recommendation fetch failed: ${res.status}`);
+        return res.json() as Promise<RecommendationData>;
+      })
+      .then((body) => {
+        if (!cancelled) setState({ status: "ok", recommendation: body });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ status: "error" });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [opportunityId, refreshKey]);
+
+  return state;
+}
+
+// S-30b (decision 058): the only two JD fields a human can edit. Saving an
+// empty skills text box is sent as a real [] (a deliberate "no skills
+// required" edit, not "do nothing") -- matches the backend's NULL-vs-[]
+// distinction in decision 058. A blank years field is sent as null
+// ("genuinely unknown"), never defaulted to 0.
+function EditJdModal({
+  opportunity,
+  onClose,
+  onSaved,
+}: {
+  opportunity: Opportunity;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [skillsText, setSkillsText] = useState((opportunity.requiredSkills ?? []).join(", "));
+  const [yearsText, setYearsText] = useState(
+    opportunity.requiredYears != null ? String(opportunity.requiredYears) : "",
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    const requiredSkills = skillsText
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    const yearsTrimmed = yearsText.trim();
+    const requiredYears = yearsTrimmed === "" ? null : Number(yearsTrimmed);
+    if (requiredYears !== null && (!Number.isInteger(requiredYears) || requiredYears < 0)) {
+      setError("Required years must be a non-negative whole number, or left blank for unknown.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    const token = getStoredToken();
+    if (!token) {
+      setError("Your session has expired. Please log in again.");
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/opportunities/${opportunity.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ requiredSkills, requiredYears }),
+      });
+      if (!res.ok) throw new Error(`JD save failed: ${res.status}`);
+      onSaved();
+      onClose();
+    } catch {
+      setError("Could not save. Please try again.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="raw-payload-modal" role="dialog" aria-label={`Edit JD — ${opportunity.company}`}>
+      <div className="raw-payload-modal-panel jd-editor-panel">
+        <div className="raw-payload-modal-header">
+          <span>Edit JD — {opportunity.company}</span>
+          <button type="button" aria-label="Close" onClick={onClose} disabled={saving}>
+            ✕
+          </button>
+        </div>
+
+        <label className="jd-editor-field">
+          <span>Required skills (comma-separated)</span>
+          <input
+            type="text"
+            value={skillsText}
+            onChange={(e) => setSkillsText(e.target.value)}
+            placeholder="e.g. sql, python, excel"
+            disabled={saving}
+          />
+          <p className="jd-editor-hint">Leave blank to save "no skills required" — distinct from never edited.</p>
+        </label>
+
+        <label className="jd-editor-field">
+          <span>Required years</span>
+          <input
+            type="number"
+            min={0}
+            value={yearsText}
+            onChange={(e) => setYearsText(e.target.value)}
+            placeholder="Unknown"
+            disabled={saving}
+          />
+        </label>
+
+        {error && <p className="jd-editor-error">{error}</p>}
+
+        <div className="jd-editor-actions">
+          <button type="button" className="btn" onClick={onClose} disabled={saving}>
+            Cancel
+          </button>
+          <button type="button" className="btn" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// S-30b: renders S-30a's recommendation below "How this was scored." Every
+// box shows the real backend message (real numbers/skill names), never a
+// client-reinvented template -- only the box styling and action button vary
+// by kind. "Add candidates" has no real destination wired yet (no screen or
+// nav target was specified for this story), so it's rendered as an inert,
+// disabled affordance rather than a button that silently does nothing.
+function RecommendationPanel({ opportunity }: { opportunity: Opportunity }) {
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const state = useRecommendation(opportunity.id, refreshKey);
+
+  return (
+    <div className="recommendation-panel" aria-label="recommendation">
+      {state.status === "loading" && <p className="recommendation-loading">Loading recommendation...</p>}
+      {state.status === "error" && <p className="recommendation-error">Could not load recommendation.</p>}
+      {state.status === "ok" && (
+        <>
+          {state.recommendation.kind === "no_action" ? (
+            <span className="recommendation-pill">✓ {state.recommendation.message}</span>
+          ) : (
+            <div className={`recommendation-box recommendation-box--${state.recommendation.kind}`}>
+              <p>{state.recommendation.message}</p>
+              {state.recommendation.kind === "add_candidates" ? (
+                <button
+                  type="button"
+                  className="recommendation-action"
+                  disabled
+                  title="Sourcing candidates isn't wired up on this screen yet"
+                >
+                  Add candidates
+                </button>
+              ) : (
+                <button type="button" className="recommendation-action" onClick={() => setEditing(true)}>
+                  Edit JD
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      {editing && (
+        <EditJdModal
+          opportunity={opportunity}
+          onClose={() => setEditing(false)}
+          onSaved={() => setRefreshKey((k) => k + 1)}
+        />
+      )}
+    </div>
+  );
+}
+
 function OpportunityCard({
   opportunity,
   rank,
@@ -533,6 +753,11 @@ function OpportunityCard({
               <p key={r}>{r}</p>
             ))}
         </div>
+
+        {/* S-30b: the actionable follow-up to "How this was scored" --
+            S-30a's recommendation (loosen the JD, add candidates, or ready
+            to send), with a real editing path where one exists. */}
+        <RecommendationPanel opportunity={opportunity} />
 
         {/* Native <details>/<summary> gives expand/collapse via built-in
             browser state — no useState needed, since the data is already

@@ -13,6 +13,10 @@ function isValidIdList(value: unknown): value is string[] {
   );
 }
 
+function isValidSkillsArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((s) => typeof s === "string");
+}
+
 interface RawPayloadRow {
   source: string;
   external_id: string;
@@ -108,6 +112,81 @@ export function opportunitiesRouter(pool: Pool): Router {
     } catch (err) {
       logger.error({ correlationId: req.correlationId, err }, "opportunities score lookup failed");
       res.status(500).json({ error: "score lookup failed" });
+    }
+  });
+
+  // S-30b (decision 058): the JD editor's save action. Additive and
+  // deliberately narrow -- ONLY required_skills/required_years are
+  // editable here, everything else on an opportunity (title, company,
+  // source, confidence, reasons, hard-to-fill fields...) stays exclusively
+  // ATS-derived, never user-writable through this or any endpoint. At
+  // least one of the two fields must be present; either can be sent alone.
+  // Sending required_skills: [] is accepted as a real, deliberate "no
+  // skills required" edit (see fits.ts's toFitOpportunityInput, which
+  // treats stored-but-empty differently from never-edited/NULL).
+  router.patch("/opportunities/:id", requireAuth, requireRole(["admin", "sales"]), async (req, res) => {
+    const opportunityId = req.params.id;
+    const hasSkills = Object.prototype.hasOwnProperty.call(req.body ?? {}, "requiredSkills");
+    const hasYears = Object.prototype.hasOwnProperty.call(req.body ?? {}, "requiredYears");
+
+    if (!hasSkills && !hasYears) {
+      res.status(400).json({ error: "at least one of requiredSkills or requiredYears is required" });
+      return;
+    }
+    if (hasSkills && !isValidSkillsArray(req.body.requiredSkills)) {
+      res.status(400).json({ error: "requiredSkills must be an array of strings" });
+      return;
+    }
+    const requiredYearsRaw = req.body?.requiredYears;
+    const hasValidYears =
+      !hasYears || requiredYearsRaw === null || (Number.isInteger(requiredYearsRaw) && requiredYearsRaw >= 0);
+    if (!hasValidYears) {
+      res.status(400).json({ error: "requiredYears must be a non-negative integer or null" });
+      return;
+    }
+
+    try {
+      // Only the columns the caller actually sent are updated -- a caller
+      // that sends just requiredYears doesn't accidentally null out an
+      // existing requiredSkills edit, and vice versa.
+      const setClauses: string[] = [];
+      const values: unknown[] = [];
+      if (hasSkills) {
+        values.push(req.body.requiredSkills);
+        setClauses.push(`required_skills = $${values.length}`);
+      }
+      if (hasYears) {
+        values.push(requiredYearsRaw);
+        setClauses.push(`required_years = $${values.length}`);
+      }
+      values.push(opportunityId);
+
+      const { rows } = await pool.query(
+        `UPDATE opportunities SET ${setClauses.join(", ")}, updated_at = now()
+         WHERE id = $${values.length}
+         RETURNING id, required_skills, required_years`,
+        values,
+      );
+
+      if (rows.length === 0) {
+        res.status(404).json({ error: "opportunity not found" });
+        return;
+      }
+
+      logger.info(
+        { correlationId: req.correlationId, opportunityId, editedSkills: hasSkills, editedYears: hasYears },
+        "opportunity JD fields edited",
+      );
+      res.status(200).json({
+        opportunity: {
+          id: rows[0].id,
+          requiredSkills: rows[0].required_skills,
+          requiredYears: rows[0].required_years,
+        },
+      });
+    } catch (err) {
+      logger.error({ correlationId: req.correlationId, err }, "opportunity JD edit failed");
+      res.status(500).json({ error: "JD edit failed" });
     }
   });
 

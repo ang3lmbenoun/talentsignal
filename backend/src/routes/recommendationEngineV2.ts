@@ -29,7 +29,7 @@ export function recommendationEngineV2Router(pool: Pool): Router {
 
       try {
         const oppResult = await pool.query(
-          "SELECT id, title, family_key FROM opportunities WHERE id = $1",
+          "SELECT id, title, family_key, required_skills, required_years FROM opportunities WHERE id = $1",
           [opportunityId],
         );
         if (oppResult.rows.length === 0) {
