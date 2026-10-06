@@ -15,7 +15,8 @@
     "load-test": "tsx scripts/load-test/run.ts",
     "ingest:once": "tsx scripts/ingest-once.ts",
     "ingest:capacity-once": "tsx scripts/ingest-capacity-once.ts",
-    "backfill:family-key": "tsx scripts/backfillFamilyKey.ts"
+    "backfill:family-key": "tsx scripts/backfillFamilyKey.ts",
+    "analyze:s25": "tsx src/analysis/s25HardnessValidation.ts"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
