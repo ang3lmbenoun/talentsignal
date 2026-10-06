@@ -57,15 +57,19 @@ describe("HardToFillTargeting", () => {
     render(<HardToFillTargeting />);
 
     await waitFor(() => expect(screen.getByText("Senior Data Analyst")).toBeInTheDocument());
-    const item = screen.getByText("Senior Data Analyst").closest("li");
-    expect(item).toHaveTextContent("Insight Analytics");
-    expect(item).toHaveTextContent("100% hard to fill");
-    expect(item).toHaveTextContent("in-demand role type");
-    expect(item).toHaveTextContent("Needs:");
-    // Students appear with their fit and the reason behind it — never bare.
-    expect(item).toHaveTextContent("Strong Match");
-    expect(item).toHaveTextContent("62% fit");
-    expect(item).toHaveTextContent("matched: sql, python");
+    const card = screen.getByText("Senior Data Analyst").closest("article");
+    expect(card).toHaveTextContent("Insight Analytics");
+    expect(card).toHaveTextContent("100% hard to fill");
+    expect(card).toHaveTextContent("in-demand role type");
+    expect(card).toHaveTextContent("Needs:");
+    // Students appear with their fit and the real matched skills — never bare.
+    expect(card).toHaveTextContent("Strong Match");
+    expect(card).toHaveTextContent("62% fit");
+    expect(card).toHaveTextContent("sql");
+    expect(card).toHaveTextContent("python");
+    // The zero-overlap candidate is honestly labeled, not hidden or faked.
+    expect(card).toHaveTextContent("No Match");
+    expect(card).toHaveTextContent("no matching skills");
   });
 
   it("shows the advisory note and has NO submit control (HF-3 trust: human releases)", async () => {

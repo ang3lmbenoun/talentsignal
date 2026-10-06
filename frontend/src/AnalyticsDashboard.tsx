@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Play, Clock, Radar, Briefcase, type LucideIcon } from "lucide-react";
 import { getStoredRole, getStoredToken } from "./auth";
 import { ForecastChart, type ForecastResult } from "./ForecastChart";
 import { AnomalyReviewList, type AnomalyPoint } from "./AnomalyReviewList";
@@ -156,20 +157,35 @@ function DemandGauge({ percent }: { percent: number }) {
   );
 }
 
+// Redesign per talentsignal-redesign.html: same .kpi-tile/.kpi-grid visual
+// language already established on Overview/Targeting (icon badge, big
+// value, "why it matters" caption) -- this screen used a plainer, visually
+// inconsistent tile before. children still lets each tile supply its own
+// real visual (delta arrow, histogram, gauge) below the headline value.
 function KpiTile({
+  icon: Icon,
+  accentVar,
   label,
+  why,
   children,
   caption,
 }: {
+  icon: LucideIcon;
+  accentVar: "--accent" | "--accent-2" | "--success" | "--warning";
   label: string;
+  why: string;
   children: React.ReactNode;
   caption?: string;
 }) {
   return (
-    <div className="opportunity-kpi-tile analytics-kpi-tile">
-      <div className="opportunity-kpi-label">{label}</div>
+    <div className="kpi-tile" role="group" aria-label={label}>
+      <div className="kpi-tile-icon" style={{ background: `var(${accentVar})` }}>
+        <Icon size={18} aria-hidden="true" />
+      </div>
       <div className="analytics-kpi-body">{children}</div>
-      {caption && <div className="signal-card-history">{caption}</div>}
+      <span className="kpi-tile-label">{label}</span>
+      {caption && <p className="kpi-tile-caption">{caption}</p>}
+      <p className="kpi-tile-why">{why}</p>
     </div>
   );
 }
@@ -442,46 +458,58 @@ export function AnalyticsDashboard() {
     <section aria-label="analytics dashboard">
       <h2>Agency Analytics</h2>
 
-      <div className="opportunity-kpi-strip">
-        <KpiTile label="Placements this month" caption={`n=${placementsPerMonth.length} months loaded`}>
-          <div className="opportunity-kpi-value">{lastMonth?.count ?? 0}</div>
+      <div className="kpi-grid">
+        <KpiTile
+          icon={Play}
+          accentVar="--accent"
+          label="Placements this month"
+          why="the clearest signal of whether outreach is converting right now"
+          caption={`n=${placementsPerMonth.length} months loaded`}
+        >
+          <span className="kpi-tile-value mono">{lastMonth?.count ?? 0}</span>
           <DeltaArrow current={lastMonth?.count ?? 0} prior={priorMonth?.count} />
         </KpiTile>
 
         <KpiTile
+          icon={Clock}
+          accentVar="--accent-2"
           label="Avg. time-to-hire"
+          why="sets realistic client expectations for how long a fill takes"
           caption={timeToHire.sampleSize > 0 ? `n=${timeToHire.sampleSize} placements` : "no closed placements yet"}
         >
           <div className="analytics-kpi-with-histogram">
-            <div className="opportunity-kpi-value">{timeToHire.averageDays ?? "—"}</div>
+            <span className="kpi-tile-value mono">{timeToHire.averageDays ?? "—"}</span>
             <TimeToHireHistogram months={timeToHirePerMonth} />
           </div>
         </KpiTile>
 
         <KpiTile
+          icon={Radar}
+          accentVar="--success"
           label="Demand score"
+          why="average opportunity confidence across the currently loaded data"
           caption={demandScore.sampleSize > 0 ? `n=${demandScore.sampleSize} opportunities` : "no opportunities scored yet"}
         >
           <DemandGauge percent={demandScore.average === null ? 0 : Math.round(demandScore.average * 100)} />
         </KpiTile>
 
         <KpiTile
+          icon={Briefcase}
+          accentVar="--warning"
           label="Active pipeline value"
-          caption={
-            packageCounts
-              ? `n=${packageCounts.total} packages total — count of drafts, not a dollar figure (no bill/pay rate data exists)`
-              : "n=packages not yet loaded"
-          }
+          why="count of in-flight drafts, not a dollar figure — no bill/pay rate field exists"
+          caption={packageCounts ? `n=${packageCounts.total} packages total` : "n=packages not yet loaded"}
         >
-          <div className="opportunity-kpi-value opportunity-kpi-value--accent">{packageCounts?.draft ?? "—"}</div>
+          <span className="kpi-tile-value mono">{packageCounts?.draft ?? "—"}</span>
         </KpiTile>
       </div>
 
-      <div aria-label="placements per month" className="overview-card">
-        <h3>Placements and time-to-hire</h3>
-        <p className="small">Bars = real monthly placements · line = real average time-to-hire per month.</p>
-        <PlacementsComboChart placements={placementsPerMonth} timeToHire={timeToHirePerMonth} />
-      </div>
+      <div className="analytics-grid-2">
+        <div aria-label="placements per month" className="overview-card">
+          <h3>Placements and time-to-hire</h3>
+          <p className="small">Bars = real monthly placements · line = real average time-to-hire per month.</p>
+          <PlacementsComboChart placements={placementsPerMonth} timeToHire={timeToHirePerMonth} />
+        </div>
 
       {/*
         S-13: extends the chart above with a forecast line, a shaded
@@ -493,28 +521,57 @@ export function AnalyticsDashboard() {
         is also reused unmodified by Revenue Anomalies below it, and its
         statistical rigor is real, tested work worth keeping intact.
       */}
-      <div aria-label="demand forecast" className="overview-card">
-        <div className="between">
-          <h3>Demand forecast</h3>
-          <span
-            className="small"
-            title="Ordinary least-squares linear regression over real monthly placements (month index vs. count), extended forward for the forecast horizon. See 06_decisions/021."
-          >
-            How we forecast ⓘ
-          </span>
+        <div aria-label="demand forecast" className="overview-card">
+          <div className="between">
+            <h3>Demand forecast</h3>
+            <span
+              className="small"
+              title="Ordinary least-squares linear regression over real monthly placements (month index vs. count), extended forward for the forecast horizon. See 06_decisions/021."
+            >
+              How we forecast ⓘ
+            </span>
+          </div>
+          {forecastState.status === "loading" && <p>Loading forecast...</p>}
+          {forecastState.status === "unauthenticated" && (
+            <p>Your session has expired. Please log in again.</p>
+          )}
+          {forecastState.status === "error" && <p>Could not load forecast.</p>}
+          {forecastState.status === "ok" && <ForecastChart data={forecastState.data} />}
         </div>
-        {forecastState.status === "loading" && <p>Loading forecast...</p>}
-        {forecastState.status === "unauthenticated" && (
-          <p>Your session has expired. Please log in again.</p>
-        )}
-        {forecastState.status === "error" && <p>Could not load forecast.</p>}
-        {forecastState.status === "ok" && <ForecastChart data={forecastState.data} />}
       </div>
 
-      <div aria-label="client contribution" className="overview-card">
-        <h3>Client contribution · top 10 by placements</h3>
-        <ClientContributionPanel clients={topClientsByPlacements} />
-        <p className="caption">Ranked by the same event-based placement count as the KPI above (decision 020).</p>
+      <div className="analytics-grid-2">
+        <div aria-label="client contribution" className="overview-card">
+          <h3>Client contribution · top 10 by placements</h3>
+          <ClientContributionPanel clients={topClientsByPlacements} />
+          <p className="caption">Ranked by the same event-based placement count as the KPI above (decision 020).</p>
+        </div>
+
+        <div aria-label="client segments" className="overview-card">
+          <h3>Clients by hiring volume (advisory only)</h3>
+          {anomaliesState.status === "loading" && <p>Loading segments...</p>}
+          {anomaliesState.status === "unauthenticated" && (
+            <p>Your session has expired. Please log in again.</p>
+          )}
+          {anomaliesState.status === "error" && <p>Could not load segments.</p>}
+          {anomaliesState.status === "ok" &&
+            (anomaliesState.data.segments.groups.length === 0 ? (
+              <p>No clients to segment yet.</p>
+            ) : (
+              anomaliesState.data.segments.groups.map((group) => (
+                <div key={group.segment}>
+                  <h4>{group.segment}</h4>
+                  <ul aria-label={`${group.segment} segment clients`}>
+                    {group.clients.map((client) => (
+                      <li key={client.id}>
+                        {client.name} — {client.openRoles} open role{client.openRoles === 1 ? "" : "s"}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))
+            ))}
+        </div>
       </div>
 
       {/*
@@ -547,32 +604,6 @@ export function AnalyticsDashboard() {
             )}
           </>
         )}
-      </div>
-
-      <div aria-label="client segments" className="overview-card">
-        <h3>Clients by hiring volume (advisory only)</h3>
-        {anomaliesState.status === "loading" && <p>Loading segments...</p>}
-        {anomaliesState.status === "unauthenticated" && (
-          <p>Your session has expired. Please log in again.</p>
-        )}
-        {anomaliesState.status === "error" && <p>Could not load segments.</p>}
-        {anomaliesState.status === "ok" &&
-          (anomaliesState.data.segments.groups.length === 0 ? (
-            <p>No clients to segment yet.</p>
-          ) : (
-            anomaliesState.data.segments.groups.map((group) => (
-              <div key={group.segment}>
-                <h4>{group.segment}</h4>
-                <ul aria-label={`${group.segment} segment clients`}>
-                  {group.clients.map((client) => (
-                    <li key={client.id}>
-                      {client.name} — {client.openRoles} open role{client.openRoles === 1 ? "" : "s"}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))
-          ))}
       </div>
 
       {/* S-25 honesty banner — same visible-indigo-border treatment as

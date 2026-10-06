@@ -511,6 +511,17 @@ hr{ border:none; border-top:1px solid var(--border); margin:1.1rem 0; }
 }
 .caption{ font-size:12px; color:var(--mute); }
 
+/* Generic layout/type utilities from the mock (talentsignal-redesign.html)
+   that several screens (AnalyticsDashboard, HardToFillTargeting) already
+   reference by class name but that never actually had a definition here --
+   scaled to this app's existing 12-13px convention, not the mock's dense
+   8-11px micro-type. */
+.row{ display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; }
+.small{ font-size:12px; color:var(--mute); line-height:1.5; }
+.between{ display:flex; justify-content:space-between; align-items:center; gap:var(--space-2); }
+.hr{ height:1px; background:var(--border); margin:var(--space-3) 0; }
+.section-title{ font-size:13px; font-weight:700; margin:0 0 var(--space-2); }
+
 .client-kpi-strip{
   display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
   gap:var(--space-3); margin-bottom:var(--space-3);
@@ -1063,6 +1074,11 @@ ul.opportunities-grid{
 .analytics-gauge{ width:72px; height:72px; }
 .analytics-combo-chart{ width:100%; height:auto; margin-top:var(--space-2); }
 .analytics-client-bars{ display:flex; flex-direction:column; gap:8px; margin-top:var(--space-2); }
+/* S-25 redesign refresh: pairs related cards side by side, matching the
+   mock's 2-col rhythm (combo chart + forecast; client contribution +
+   segments), instead of every section stacking full-width. */
+.analytics-grid-2{ display:grid; gap:var(--space-4); margin-bottom:var(--space-3); }
+@media (min-width:880px){ .analytics-grid-2{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
 
 /* Generic labeled-bar row (reused by the client contribution panel) and its
    fill track, same visual language as the basis-distribution bars elsewhere. */
