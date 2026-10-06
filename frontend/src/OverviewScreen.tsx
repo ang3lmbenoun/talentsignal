@@ -130,19 +130,22 @@ function loadingValue(status: "loading" | "unauthenticated" | "error"): string {
 // the approved mockup (talentsignal-redesign.html, Screen 1 -- Overview).
 function KpiTile({
   icon: Icon,
-  accentVar,
   value,
   label,
   why,
+  caption,
   error,
   basisPill,
   children,
 }: {
   icon: LucideIcon;
-  accentVar: "--accent" | "--accent-2" | "--success" | "--warning";
   value: string;
   label: string;
   why: string;
+  // The real "n=..." disclosure line under the value -- what this count is
+  // actually grounded in, same spirit as basisPill below but shown on
+  // every tile, not just the ones with partial coverage.
+  caption?: string;
   error?: boolean;
   // S-29: real n= disclosure for a KPI that isn't grounded in every
   // loaded opportunity (e.g. fit scoring only covers reqs with a real
@@ -153,20 +156,24 @@ function KpiTile({
 }) {
   return (
     <div className="kpi-tile" role="group" aria-label={label}>
-      <div className="kpi-tile-icon" style={{ background: `var(${accentVar})` }}>
-        <Icon size={18} aria-hidden="true" />
+      <div className="kpi-tile-top">
+        <span className="kpi-tile-label">{label}</span>
+        <span className="kpi-tile-icon">
+          <Icon size={16} aria-hidden="true" />
+        </span>
       </div>
       <span className="kpi-tile-value mono">{value}</span>
-      <span className="kpi-tile-label">{label}</span>
       {error && <span className="stat-tile-error">Could not load</span>}
-      {children ?? (
+      {children}
+      {!children && (
         <svg className="kpi-tile-sparkline" viewBox="0 0 100 24" role="img" aria-label="Trend placeholder, no history yet">
           <path d="M0 18 L15 12 L30 15 L45 8 L60 12 L75 6 L100 10" fill="none" stroke="var(--border)" strokeWidth="2" />
         </svg>
       )}
       {basisPill && <span className="kpi-tile-basis-pill">{basisPill}</span>}
-      <p className="kpi-tile-caption">needs 4+ weeks of ingestion for a trend</p>
-      <p className="kpi-tile-why">{why}</p>
+      {caption && <p className="kpi-tile-caption">{caption}</p>}
+      <p className="kpi-tile-trend">Trend pending · needs 4+ weeks of ingestion</p>
+      <p className="kpi-tile-why">Why it matters: {why}</p>
     </div>
   );
 }
@@ -665,7 +672,6 @@ export function OverviewScreen() {
         <div className="kpi-grid">
           <KpiTile
             icon={Flame}
-            accentVar="--accent-2"
             value={
               hardToFillCount.status === "ok" && opportunitiesCount.status === "ok"
                 ? `${hardToFillCount.count}/${opportunitiesCount.count}`
@@ -673,30 +679,35 @@ export function OverviewScreen() {
             }
             label="Hard-to-fill"
             why="where your agency's revenue is hiding"
+            caption={
+              hardToFillCount.status === "ok" && opportunitiesCount.status === "ok"
+                ? `n=${hardToFillCount.count} of ${opportunitiesCount.count} opportunities`
+                : undefined
+            }
             error={hardToFillCount.status === "error" || opportunitiesCount.status === "error"}
           />
           <KpiTile
             icon={Radar}
-            accentVar="--accent"
             value={opportunitiesState.status === "ok" ? String(signalCounts.total) : loadingValue(opportunitiesState.status)}
             label="Total signals"
             why="reposts, long-open, stale, no-salary, scarcity"
+            caption={opportunitiesState.status === "ok" ? `n=${signalCounts.total} signal instances` : undefined}
             error={opportunitiesState.status === "error"}
           />
           <KpiTile
             icon={Building2}
-            accentVar="--accent"
             value={tileValue(clients)}
             label="Active clients"
             why="companies feeding requisitions"
+            caption={clients.status === "ok" ? `n=${clients.count} clients` : undefined}
             error={clients.status === "error"}
           />
           <KpiTile
             icon={Users}
-            accentVar="--accent-2"
             value={tileValue(candidates)}
             label="Candidates"
             why="available to match"
+            caption={candidates.status === "ok" ? `n=${candidates.count} candidates` : undefined}
             error={candidates.status === "error"}
           />
 
@@ -708,7 +719,6 @@ export function OverviewScreen() {
           {fitsSummaryState.status === "ok" && (
             <KpiTile
               icon={Target}
-              accentVar="--accent"
               value={
                 fitsSummaryState.summary.avgFitScore === null
                   ? "—"
@@ -722,7 +732,6 @@ export function OverviewScreen() {
           {fitsSummaryState.status !== "ok" && (
             <KpiTile
               icon={Target}
-              accentVar="--accent"
               value={loadingValue(fitsSummaryState.status)}
               label="Avg candidate fit"
               why="across reqs with measured fit data"
@@ -733,7 +742,6 @@ export function OverviewScreen() {
           {fitsSummaryState.status === "ok" && (
             <KpiTile
               icon={Target}
-              accentVar="--success"
               value={String(fitsSummaryState.summary.distribution.ge85)}
               label="Reqs with strong candidates (≥85%)"
               why="ready for outreach right now"
@@ -745,7 +753,6 @@ export function OverviewScreen() {
           {fitsSummaryState.status !== "ok" && (
             <KpiTile
               icon={Target}
-              accentVar="--success"
               value={loadingValue(fitsSummaryState.status)}
               label="Reqs with strong candidates (≥85%)"
               why="ready for outreach right now"
@@ -756,7 +763,6 @@ export function OverviewScreen() {
           {fitsSummaryState.status === "ok" && (
             <KpiTile
               icon={AlertTriangle}
-              accentVar="--warning"
               value={String(
                 fitsSummaryState.summary.distribution.b60_69 + fitsSummaryState.summary.distribution.lt60,
               )}
@@ -770,7 +776,6 @@ export function OverviewScreen() {
           {fitsSummaryState.status !== "ok" && (
             <KpiTile
               icon={AlertTriangle}
-              accentVar="--warning"
               value={loadingValue(fitsSummaryState.status)}
               label="Reqs needing attention (<70%)"
               why="Ali wants you to look here"

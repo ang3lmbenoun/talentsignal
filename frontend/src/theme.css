@@ -441,26 +441,34 @@ hr{ border:none; border-top:1px solid var(--border); margin:1.1rem 0; }
   display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
   gap:var(--space-4); margin-bottom:var(--space-3);
 }
+/* Redesign per talentsignal-redesign.html's metric-card: label + icon badge
+   share a top row (icon top-RIGHT, not stacked above the value), the big
+   value sits below, and the sparkline is a small decorative squiggle tucked
+   into the card's empty bottom-right corner rather than a full-width
+   in-flow line -- matches the reference screenshots exactly instead of the
+   earlier approximation. */
 .kpi-tile{
-  display:flex; flex-direction:column;
+  position:relative; display:flex; flex-direction:column; overflow:hidden;
   background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
   box-shadow:var(--shadow), var(--tile-inset-top); padding:var(--space-4);
   transition:box-shadow 200ms ease;
 }
 .kpi-tile:hover{ box-shadow:var(--shadow-hover), var(--tile-inset-top); }
+.kpi-tile-top{ display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); }
 .kpi-tile-icon{
   display:flex; align-items:center; justify-content:center;
-  width:34px; height:34px; border-radius:9px; color:#fff; flex-shrink:0;
-  margin-bottom:var(--space-2);
+  width:30px; height:30px; border-radius:8px; color:var(--accent); flex-shrink:0;
+  background:var(--accent-soft);
 }
-.kpi-tile-value{ font-size:30px; font-weight:700; letter-spacing:-.01em; line-height:1.1; }
-.kpi-tile-label{ font-size:12.5px; color:var(--mute); margin-top:4px; }
-.kpi-tile-sparkline{ width:100%; height:24px; margin-top:var(--space-3); }
-.kpi-tile-caption{ font-size:10.5px; color:var(--mute); margin:.3em 0 0; }
-.kpi-tile-why{
-  font-size:12px; color:var(--mute); margin:var(--space-2) 0 0;
-  padding-left:.6em; border-left:2px solid var(--accent-soft);
+.kpi-tile-value{ font-size:28px; font-weight:700; letter-spacing:-.01em; line-height:1.15; margin-top:var(--space-2); }
+.kpi-tile-label{ font-size:12.5px; color:var(--mute); }
+.kpi-tile-sparkline{
+  position:absolute; right:12px; bottom:30px; width:56px; height:20px;
+  opacity:.55; pointer-events:none;
 }
+.kpi-tile-caption{ font-size:11px; color:var(--mute); margin:.3em 0 0; position:relative; }
+.kpi-tile-trend{ font-size:11px; color:var(--accent-hover); margin:.4em 0 0; position:relative; }
+.kpi-tile-why{ font-size:11px; color:var(--accent-hover); margin:.2em 0 0; position:relative; }
 
 /* ---- overview: S-29 fit-scoring KPI tiles ---- */
 .kpi-tile-basis-pill{
@@ -1080,11 +1088,49 @@ ul.opportunities-grid{
 .analytics-grid-2{ display:grid; gap:var(--space-4); margin-bottom:var(--space-3); }
 @media (min-width:880px){ .analytics-grid-2{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
 
+/* S-25 redesign: narrowing funnel bars for the Demand forecast card, per
+   talentsignal-redesign.html. Each bar's own width is the real signal
+   (widest = most opportunities still in that stage), not a fixed/decorative
+   taper. */
+.analytics-funnel{ display:grid; justify-items:center; gap:6px; margin-top:var(--space-2); }
+.analytics-funnel-bar{
+  height:30px; display:flex; align-items:center; justify-content:center;
+  border-radius:7px; color:#fff; font-size:12px; font-weight:600; text-align:center;
+  background:var(--accent); padding:0 var(--space-2);
+}
+.analytics-funnel-bar:nth-child(2){ background:color-mix(in srgb, var(--accent) 80%, #fff); }
+.analytics-funnel-bar:nth-child(3){ background:color-mix(in srgb, var(--accent) 60%, #fff); }
+.analytics-funnel-bar:nth-child(4){ background:color-mix(in srgb, var(--accent) 40%, #fff); color:var(--accent-hover); }
+
 /* Generic labeled-bar row (reused by the client contribution panel) and its
    fill track, same visual language as the basis-distribution bars elsewhere. */
 .dist{ display:grid; grid-template-columns:120px 1fr 34px; gap:8px; align-items:center; font-size:12px; }
 .barline{ height:7px; border-radius:9px; background:var(--surface-2); overflow:hidden; }
 .barline i{ display:block; height:100%; background:var(--accent); border-radius:9px; }
+
+/* ---- Targeting screen (HardToFillTargeting.tsx) ---- */
+.targeting-role-list{ display:flex; flex-direction:column; gap:var(--space-4); }
+.targeting-role-card{ display:flex; flex-direction:column; }
+.targeting-candidate{
+  background:var(--surface-2); border:1px solid var(--border); border-radius:8px;
+  padding:var(--space-2) var(--space-3);
+}
+.targeting-candidate-fit{ font-size:12px; font-weight:700; color:var(--accent); }
+
+/* Per-cluster collapsible bars -- each <details class="cluster"> shows a
+   label, a real proportional barline, and a count in one summary row. */
+.target-bars{ display:flex; flex-direction:column; gap:6px; margin-top:var(--space-2); }
+.cluster{ border:1px solid var(--border); border-radius:8px; background:var(--surface); padding:var(--space-2) var(--space-3); }
+.cluster > summary{
+  display:grid; grid-template-columns:minmax(120px, auto) minmax(60px, 1fr) 44px;
+  gap:var(--space-2); align-items:center; cursor:pointer; list-style:none;
+}
+.cluster > summary::-webkit-details-marker{ display:none; }
+.cluster-label{ font-size:12.5px; font-weight:600; }
+.cluster-list{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+  gap:var(--space-2); margin-top:var(--space-3);
+}
 
 /* ---- opportunities: company-grouped landing (S-26) ---- */
 .opportunity-company-rows{ list-style:none; margin:0 0 var(--space-4); padding:0; display:flex; flex-direction:column; gap:var(--space-3); }

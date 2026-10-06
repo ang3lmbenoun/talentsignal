@@ -36,29 +36,32 @@ type TargetingState =
 // rest of the app instead of being the one screen still on bare <ul>/<li>.
 function KpiTile({
   icon: Icon,
-  accentVar,
   value,
   label,
   why,
+  caption,
 }: {
   icon: LucideIcon;
-  accentVar: "--accent" | "--accent-2" | "--success" | "--warning";
   value: string;
   label: string;
   why: string;
+  caption?: string;
 }) {
   return (
     <div className="kpi-tile" role="group" aria-label={label}>
-      <div className="kpi-tile-icon" style={{ background: `var(${accentVar})` }}>
-        <Icon size={18} aria-hidden="true" />
+      <div className="kpi-tile-top">
+        <span className="kpi-tile-label">{label}</span>
+        <span className="kpi-tile-icon">
+          <Icon size={16} aria-hidden="true" />
+        </span>
       </div>
       <span className="kpi-tile-value mono">{value}</span>
-      <span className="kpi-tile-label">{label}</span>
       <svg className="kpi-tile-sparkline" viewBox="0 0 100 24" role="img" aria-label="Trend placeholder, no history yet">
         <path d="M0 18 L15 12 L30 15 L45 8 L60 12 L75 6 L100 10" fill="none" stroke="var(--border)" strokeWidth="2" />
       </svg>
-      <p className="kpi-tile-caption">needs 4+ weeks of ingestion for a trend</p>
-      <p className="kpi-tile-why">{why}</p>
+      {caption && <p className="kpi-tile-caption">{caption}</p>}
+      <p className="kpi-tile-trend">Trend pending · needs 4+ weeks of ingestion</p>
+      <p className="kpi-tile-why">Why it matters: {why}</p>
     </div>
   );
 }
@@ -67,16 +70,32 @@ function companyMonogram(company: string): string {
   return company.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || "—";
 }
 
-// Real, field-based grouping -- NOT an invented numeric fit-% cutoff (which
-// would be exactly the kind of unlogged business threshold CLAUDE.md rule 4
-// forbids). matchedSkills.length is already a real fact on every student,
-// so splitting on "has at least one matched skill" needs no new decision
-// log entry the way an arbitrary "0-29% / 30-69% / 70%+" bucket would.
-function groupByOverlap(students: Student[]): { overlap: Student[]; none: Student[] } {
-  return {
-    overlap: students.filter((s) => s.matchedSkills.length > 0),
-    none: students.filter((s) => s.matchedSkills.length === 0),
-  };
+interface FitCluster {
+  percent: number;
+  label: string;
+  students: Student[];
+}
+
+// Groups by each student's OWN real, exact fit percentage -- not an
+// invented numeric range like "21-29%" (which would be exactly the kind of
+// unlogged business threshold CLAUDE.md rule 4 forbids). Candidates who
+// happen to share a real percentage end up in the same cluster; the
+// resulting cluster sizes/gaps are a direct readout of the real score
+// distribution, not a boundary this app chose.
+function groupByFitPercent(students: Student[]): FitCluster[] {
+  const byPercent = new Map<number, Student[]>();
+  for (const s of students) {
+    const pct = Math.round(s.fitScore * 100);
+    if (!byPercent.has(pct)) byPercent.set(pct, []);
+    byPercent.get(pct)?.push(s);
+  }
+  return [...byPercent.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([percent, group]) => ({
+      percent,
+      label: percent === 0 ? "No skill overlap" : `${percent}% fit`,
+      students: group,
+    }));
 }
 
 function CandidateRow({ student }: { student: Student }) {
@@ -107,7 +126,7 @@ function CandidateRow({ student }: { student: Student }) {
 }
 
 function TargetRoleCard({ target }: { target: Target }) {
-  const { overlap, none } = groupByOverlap(target.students);
+  const clusters = groupByFitPercent(target.students);
   const topFit = target.students[0]?.fitScore ?? 0;
 
   return (
@@ -148,33 +167,39 @@ function TargetRoleCard({ target }: { target: Target }) {
       <div className="hr" />
 
       <div className="between">
-        <h4 className="section-title">Candidate fit</h4>
-        <span className="small">Ranked by real skill/experience overlap, highest first.</span>
+        <h4 className="section-title">Candidate-fit clusters</h4>
+        <span className="small">Each cluster is a real, shared fit percentage — not a chosen range.</span>
       </div>
 
-      <details className="targeting-cluster" open={overlap.length > 0}>
-        <summary>
-          <span>Matched skills</span>
-          <b className="mono">n={overlap.length}</b>
-        </summary>
-        <div className="targeting-cluster-list">
-          {overlap.map((student) => (
-            <CandidateRow student={student} key={student.id} />
-          ))}
-        </div>
-      </details>
-
-      <details className="targeting-cluster">
-        <summary>
-          <span>No skill overlap</span>
-          <b className="mono">n={none.length}</b>
-        </summary>
-        <div className="targeting-cluster-list">
-          {none.map((student) => (
-            <CandidateRow student={student} key={student.id} />
-          ))}
-        </div>
-      </details>
+      <div className="target-bars">
+        {clusters.map((cluster) => (
+          <details className="cluster" key={cluster.percent}>
+            <summary>
+              <span className="cluster-label">
+                {cluster.label} · {cluster.percent}%
+              </span>
+              <span className="barline">
+                <i
+                  style={{
+                    width: `${(cluster.students.length / target.students.length) * 100}%`,
+                    background: cluster.percent === 0 ? "var(--border)" : undefined,
+                  }}
+                />
+              </span>
+              <b className="mono">n={cluster.students.length}</b>
+            </summary>
+            <div className="cluster-list targeting-cluster-list">
+              {cluster.students.map((student) => (
+                <CandidateRow student={student} key={student.id} />
+              ))}
+            </div>
+          </details>
+        ))}
+      </div>
+      <p className="caption">
+        Counts total n={target.students.length}. The {Math.round(target.hardToFillScore * 100)}% hard-to-fill score is not a
+        candidate fit score.
+      </p>
     </article>
   );
 }
@@ -233,31 +258,31 @@ export function HardToFillTargeting() {
       <div className="kpi-grid">
         <KpiTile
           icon={Flame}
-          accentVar="--warning"
           value={String(targets.length)}
           label="Target roles"
           why="hard-to-fill roles currently cleared for targeting"
+          caption={`n=${targets.length} requisitions`}
         />
         <KpiTile
           icon={Users}
-          accentVar="--accent"
           value={String(totalStudents)}
           label="Ranked candidate rows"
           why="every candidate ranked against at least one target role"
+          caption={`n=${totalStudents} ranked rows`}
         />
         <KpiTile
           icon={TargetIcon}
-          accentVar="--success"
           value={`${Math.round(topFitAcrossAll * 100)}%`}
           label="Top candidate fit"
           why="the single best real match across every target role"
+          caption="n=1 candidate"
         />
         <KpiTile
           icon={Percent}
-          accentVar="--accent-2"
           value={`${Math.round(avgHardToFill * 100)}%`}
           label="Avg hard-to-fill score"
           why="average difficulty across the roles shown below"
+          caption={`n=${targets.length} roles`}
         />
       </div>
 

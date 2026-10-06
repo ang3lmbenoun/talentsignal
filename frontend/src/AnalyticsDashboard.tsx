@@ -3,6 +3,7 @@ import { Play, Clock, Radar, Briefcase, type LucideIcon } from "lucide-react";
 import { getStoredRole, getStoredToken } from "./auth";
 import { ForecastChart, type ForecastResult } from "./ForecastChart";
 import { AnomalyReviewList, type AnomalyPoint } from "./AnomalyReviewList";
+import { computeSignalInstanceCounts, type BasisOpportunity } from "./lib/basisDerivation";
 
 interface MonthCount {
   month: string;
@@ -157,6 +158,43 @@ function DemandGauge({ percent }: { percent: number }) {
   );
 }
 
+// Redesign per talentsignal-redesign.html's "Demand forecast" funnel --
+// 4 real, narrowing counts (active requisitions -> signal-bearing roles ->
+// high-confidence demand -> human-reviewed), replacing this card's prior
+// decorative-only need to exist alongside the real stats below it. Every
+// number here is real (opportunitiesFunnel's live fetch, demandScore from
+// GET /api/analytics), not re-derived from the mock's fixture numbers.
+// "Human-reviewed opportunities" has no real backing
+// field anywhere in this schema (no human-review-decision column exists),
+// so its bar is rendered without a count rather than inventing one --
+// same "n=not supplied" honesty convention the rest of this screen uses.
+function DemandFunnel({
+  totalOpportunities,
+  signalBearing,
+  demandScorePercent,
+}: {
+  totalOpportunities: number | undefined;
+  signalBearing: number | undefined;
+  demandScorePercent: number;
+}) {
+  const stages = [
+    { label: "Active requisitions", detail: totalOpportunities !== undefined ? `n=${totalOpportunities}` : undefined, widthPct: 96 },
+    { label: "Signal-bearing roles", detail: signalBearing !== undefined ? `n=${signalBearing} instances` : undefined, widthPct: 74 },
+    { label: "High-confidence demand", detail: `${demandScorePercent}% score`, widthPct: 53 },
+    { label: "Human-reviewed opportunities", detail: undefined, widthPct: 32 },
+  ];
+  return (
+    <div className="analytics-funnel" role="img" aria-label="demand forecast funnel">
+      {stages.map((stage) => (
+        <div className="analytics-funnel-bar" style={{ width: `${stage.widthPct}%` }} key={stage.label}>
+          {stage.label}
+          {stage.detail ? ` · ${stage.detail}` : ""}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Redesign per talentsignal-redesign.html: same .kpi-tile/.kpi-grid visual
 // language already established on Overview/Targeting (icon badge, big
 // value, "why it matters" caption) -- this screen used a plainer, visually
@@ -164,14 +202,12 @@ function DemandGauge({ percent }: { percent: number }) {
 // real visual (delta arrow, histogram, gauge) below the headline value.
 function KpiTile({
   icon: Icon,
-  accentVar,
   label,
   why,
   children,
   caption,
 }: {
   icon: LucideIcon;
-  accentVar: "--accent" | "--accent-2" | "--success" | "--warning";
   label: string;
   why: string;
   children: React.ReactNode;
@@ -179,13 +215,16 @@ function KpiTile({
 }) {
   return (
     <div className="kpi-tile" role="group" aria-label={label}>
-      <div className="kpi-tile-icon" style={{ background: `var(${accentVar})` }}>
-        <Icon size={18} aria-hidden="true" />
+      <div className="kpi-tile-top">
+        <span className="kpi-tile-label">{label}</span>
+        <span className="kpi-tile-icon">
+          <Icon size={16} aria-hidden="true" />
+        </span>
       </div>
       <div className="analytics-kpi-body">{children}</div>
-      <span className="kpi-tile-label">{label}</span>
       {caption && <p className="kpi-tile-caption">{caption}</p>}
-      <p className="kpi-tile-why">{why}</p>
+      <p className="kpi-tile-trend">Trend pending · needs 4+ weeks of ingestion</p>
+      <p className="kpi-tile-why">Why it matters: {why}</p>
     </div>
   );
 }
@@ -297,6 +336,35 @@ export function AnalyticsDashboard() {
   const [forecastState, setForecastState] = useState<ForecastState>({ status: "loading" });
   const [anomaliesState, setAnomaliesState] = useState<AnomaliesState>({ status: "loading" });
   const [packageCounts, setPackageCounts] = useState<{ total: number; draft: number } | undefined>(undefined);
+  // Backs the "Demand forecast" funnel's real counts (active requisitions,
+  // signal-bearing roles) -- same best-effort, never-blocks-the-KPIs
+  // convention as packageCounts above. Reuses the same real
+  // computeSignalInstanceCounts() Overview/Signals already use, so this
+  // number can never drift from what those screens report.
+  const [opportunitiesFunnel, setOpportunitiesFunnel] = useState<
+    { totalOpportunities: number; signalBearing: number } | undefined
+  >(undefined);
+
+  useEffect(() => {
+    const token = getStoredToken();
+    if (!token) return;
+    let cancelled = false;
+    fetch("/api/hidden-demand/opportunities?includeSeedData=true", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? (res.json() as Promise<{ opportunities: BasisOpportunity[] }>) : null))
+      .then((body) => {
+        if (!cancelled && body) {
+          const signalCounts = computeSignalInstanceCounts(body.opportunities);
+          setOpportunitiesFunnel({
+            totalOpportunities: body.opportunities.length,
+            signalBearing: signalCounts.total,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -461,7 +529,6 @@ export function AnalyticsDashboard() {
       <div className="kpi-grid">
         <KpiTile
           icon={Play}
-          accentVar="--accent"
           label="Placements this month"
           why="the clearest signal of whether outreach is converting right now"
           caption={`n=${placementsPerMonth.length} months loaded`}
@@ -472,7 +539,6 @@ export function AnalyticsDashboard() {
 
         <KpiTile
           icon={Clock}
-          accentVar="--accent-2"
           label="Avg. time-to-hire"
           why="sets realistic client expectations for how long a fill takes"
           caption={timeToHire.sampleSize > 0 ? `n=${timeToHire.sampleSize} placements` : "no closed placements yet"}
@@ -485,7 +551,6 @@ export function AnalyticsDashboard() {
 
         <KpiTile
           icon={Radar}
-          accentVar="--success"
           label="Demand score"
           why="average opportunity confidence across the currently loaded data"
           caption={demandScore.sampleSize > 0 ? `n=${demandScore.sampleSize} opportunities` : "no opportunities scored yet"}
@@ -495,7 +560,6 @@ export function AnalyticsDashboard() {
 
         <KpiTile
           icon={Briefcase}
-          accentVar="--warning"
           label="Active pipeline value"
           why="count of in-flight drafts, not a dollar figure — no bill/pay rate field exists"
           caption={packageCounts ? `n=${packageCounts.total} packages total` : "n=packages not yet loaded"}
@@ -511,33 +575,59 @@ export function AnalyticsDashboard() {
           <PlacementsComboChart placements={placementsPerMonth} timeToHire={timeToHirePerMonth} />
         </div>
 
-      {/*
-        S-13: extends the chart above with a forecast line, a shaded
-        confidence band, and marked outliers (06_decisions/021). A separate
-        fetch/state machine from the three KPIs above — see ForecastState —
-        so a slow or failed forecast never blocks them. Kept exactly as-is
-        (real OLS linear regression over placements-per-month, per decision
-        021) rather than replaced with a decorative funnel: this component
-        is also reused unmodified by Revenue Anomalies below it, and its
-        statistical rigor is real, tested work worth keeping intact.
-      */}
+      {/* Redesign per talentsignal-redesign.html: this card now shows the
+          mock's real-counts funnel (active requisitions -> signal-bearing
+          roles -> high-confidence demand -> human-reviewed), matching the
+          reference screenshot. The real OLS linear-regression forecast
+          (06_decisions/021, S-13) moves to its own full-width section
+          below rather than being deleted — it's real, tested statistical
+          work the mock has no equivalent of. */}
         <div aria-label="demand forecast" className="overview-card">
           <div className="between">
             <h3>Demand forecast</h3>
             <span
               className="small"
-              title="Ordinary least-squares linear regression over real monthly placements (month index vs. count), extended forward for the forecast horizon. See 06_decisions/021."
+              title="Demand score reflects average opportunity confidence in the currently loaded snapshot. It is not a future-placement guarantee -- no ingestion history was supplied for a time trend."
             >
               How we forecast ⓘ
             </span>
           </div>
-          {forecastState.status === "loading" && <p>Loading forecast...</p>}
-          {forecastState.status === "unauthenticated" && (
-            <p>Your session has expired. Please log in again.</p>
-          )}
-          {forecastState.status === "error" && <p>Could not load forecast.</p>}
-          {forecastState.status === "ok" && <ForecastChart data={forecastState.data} />}
+          <DemandFunnel
+            totalOpportunities={opportunitiesFunnel?.totalOpportunities}
+            signalBearing={opportunitiesFunnel?.signalBearing}
+            demandScorePercent={demandScore.average === null ? 0 : Math.round(demandScore.average * 100)}
+          />
+          <div className="opportunity-why" style={{ marginTop: "10px" }}>
+            <b>How we forecast</b>
+            Demand score reflects average opportunity confidence in the currently loaded snapshot. It is not a
+            future placement guarantee; no ingestion history was supplied for a time trend.
+          </div>
+          <p className="caption">Trend pending · needs 4+ weeks of ingestion</p>
         </div>
+      </div>
+
+      {/*
+        S-13: a real OLS linear regression forecast line, a shaded
+        confidence band, and marked outliers over real monthly placements
+        (06_decisions/021) -- a separate fetch/state machine from the KPIs
+        above (see ForecastState), so a slow or failed forecast never blocks
+        them. This is deeper, real statistical work beyond what the mock's
+        funnel shows; kept as its own section rather than discarded.
+      */}
+      <div aria-label="placement forecast" className="overview-card">
+        <div className="between">
+          <h3>Placement forecast (statistical)</h3>
+          <span
+            className="small"
+            title="Ordinary least-squares linear regression over real monthly placements (month index vs. count), extended forward for the forecast horizon. See 06_decisions/021."
+          >
+            How this forecast works ⓘ
+          </span>
+        </div>
+        {forecastState.status === "loading" && <p>Loading forecast...</p>}
+        {forecastState.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}
+        {forecastState.status === "error" && <p>Could not load forecast.</p>}
+        {forecastState.status === "ok" && <ForecastChart data={forecastState.data} />}
       </div>
 
       <div className="analytics-grid-2">
@@ -547,31 +637,49 @@ export function AnalyticsDashboard() {
           <p className="caption">Ranked by the same event-based placement count as the KPI above (decision 020).</p>
         </div>
 
-        <div aria-label="client segments" className="overview-card">
-          <h3>Clients by hiring volume (advisory only)</h3>
-          {anomaliesState.status === "loading" && <p>Loading segments...</p>}
-          {anomaliesState.status === "unauthenticated" && (
-            <p>Your session has expired. Please log in again.</p>
+        {/* Redesign per talentsignal-redesign.html: paired with client
+            contribution, matching the reference screenshot's layout. Reuses
+            the REAL per-month histogram already computed for the "Avg.
+            time-to-hire" KPI tile above (TimeToHireHistogram) rather than
+            the mock's own explicitly-labeled-placeholder bars. */}
+        <div aria-label="time-to-hire distribution" className="overview-card">
+          <h3>Time-to-hire distribution</h3>
+          {timeToHirePerMonth.length === 0 ? (
+            <p className="caption">No closed placements yet to measure a distribution from.</p>
+          ) : (
+            <>
+              <TimeToHireHistogram months={timeToHirePerMonth} />
+              <p className="small">
+                n={timeToHire.sampleSize} placements · avg {timeToHire.averageDays ?? "—"} days
+              </p>
+              <p className="caption">Each bar is a real monthly average, not a binned count of individual placements.</p>
+            </>
           )}
-          {anomaliesState.status === "error" && <p>Could not load segments.</p>}
-          {anomaliesState.status === "ok" &&
-            (anomaliesState.data.segments.groups.length === 0 ? (
-              <p>No clients to segment yet.</p>
-            ) : (
-              anomaliesState.data.segments.groups.map((group) => (
-                <div key={group.segment}>
-                  <h4>{group.segment}</h4>
-                  <ul aria-label={`${group.segment} segment clients`}>
-                    {group.clients.map((client) => (
-                      <li key={client.id}>
-                        {client.name} — {client.openRoles} open role{client.openRoles === 1 ? "" : "s"}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))
-            ))}
         </div>
+      </div>
+
+      <div aria-label="client segments" className="overview-card">
+        <h3>Clients by hiring volume (advisory only)</h3>
+        {anomaliesState.status === "loading" && <p>Loading segments...</p>}
+        {anomaliesState.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}
+        {anomaliesState.status === "error" && <p>Could not load segments.</p>}
+        {anomaliesState.status === "ok" &&
+          (anomaliesState.data.segments.groups.length === 0 ? (
+            <p>No clients to segment yet.</p>
+          ) : (
+            anomaliesState.data.segments.groups.map((group) => (
+              <div key={group.segment}>
+                <h4>{group.segment}</h4>
+                <ul aria-label={`${group.segment} segment clients`}>
+                  {group.clients.map((client) => (
+                    <li key={client.id}>
+                      {client.name} — {client.openRoles} open role{client.openRoles === 1 ? "" : "s"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          ))}
       </div>
 
       {/*
