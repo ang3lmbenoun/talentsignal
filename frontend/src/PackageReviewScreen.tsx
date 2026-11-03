@@ -123,7 +123,7 @@ function EmailDraftEditor({
   }
 
   return (
-    <div className="package-email">
+    <div className="package-email" data-tour="packages-draft-editor">
       <div className="between">
         <div className="section-title">Editable email draft</div>
         {editable && (
@@ -358,7 +358,7 @@ export function PackageReviewScreen() {
       </div>
       <p className="trend-note">Response rate is not tracked yet: no outcome or response tracking exists.</p>
 
-      <form onSubmit={handleDraft} aria-label="draft a package" className="filterbar">
+      <form onSubmit={handleDraft} aria-label="draft a package" className="filterbar" data-tour="packages-draft-form">
         <div>
           <label htmlFor="package-opportunity">Opportunity</label>
           <br />

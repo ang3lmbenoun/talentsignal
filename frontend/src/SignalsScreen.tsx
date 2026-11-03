@@ -319,7 +319,7 @@ export function SignalsScreen({ onNavigate }: { onNavigate?: (view: string) => v
           )}
         </div>
 
-        <div className="signals-panel">
+        <div className="signals-panel" data-tour="signals-source-panel">
           <h3>Source health</h3>
           <p className="signals-panel-caption">How many postings come from each source, and whether its dates can support role-difficulty comparisons.</p>
           {sourceHealth.map((s) => (

@@ -43,12 +43,12 @@ describe("OnboardingTour component", () => {
     expect(screen.getByRole("heading", { name: "Welcome to TalentSignal" })).toBeInTheDocument();
   });
 
-  it("walks all 7 steps, ending on a Get started button with no Skip", () => {
+  it("walks all 8 steps, ending on a Get started button with no Skip", () => {
     render(<OnboardingTour onClose={() => undefined} />);
     for (let i = 1; i < TOUR_STEP_COUNT; i++) fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    expect(TOUR_STEP_COUNT).toBe(7);
-    expect(screen.getByRole("heading", { name: "You're ready to get started" })).toBeInTheDocument();
+    expect(TOUR_STEP_COUNT).toBe(8);
+    expect(screen.getByRole("heading", { name: "You're ready to get started?" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Get started" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Skip tour" })).not.toBeInTheDocument();
   });
