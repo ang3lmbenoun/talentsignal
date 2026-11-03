@@ -1,125 +1,242 @@
-# TalentSignal Revenue Engine
+# TalentSignal
 
-A full-stack web application for staffing-agency sales teams: it surfaces hidden hiring demand
-from public job-market signals, ranks candidates against open roles, and drafts outreach
-packages — with a human required to release anything before it leaves the platform or writes to
-a client CRM (see `CLAUDE.md`'s "rule that overrides everything").
+**A staffing-intelligence web app that finds hiring demand hiding in public job postings, explains every score in plain language, and never lets the software send anything without a person releasing it.**
 
-React (Vite) frontend + Node/Express API + PostgreSQL, deployed to Render as a **single service**
-(Express serves the built frontend's static assets alongside its own `/api/*` routes — see
-`06_decisions/037-revert-to-single-service.md`), backed by Render's managed Postgres. Docker
-Compose for local dev, GitHub Actions CI. Built as a Colaberry internship project (owner: Megan;
-approver: Ali Muwwakkil) against the spec captured in `00_scope/scope.md`.
+> Status: a local-only portfolio and case-study project. There is no hosted demo. See [Status](#status).
 
-**Status:** R0–R3 stories complete; S-19 (E2E tests, seed data, CI gate) shipped 2026-08-21;
-S-20 (deploy) live.
+## The problem
 
-## Live demo
+Staffing teams usually learn about a hard-to-fill role late: after a competitor has already
+placed someone, or after the client has gone quiet. The early signals are public but scattered
+across job boards: a posting that has been open for months, a role that keeps being reposted, a
+listing with no salary range, an employer whose public filings show they are hiring. Nobody has
+time to read thousands of postings and weigh those clues.
 
-**https://talentsignal.onrender.com**
+TalentSignal pulls those clues together, ranks which roles look worth a closer look, shows how
+well the available candidates fit, and drafts the outreach, **but a human stays in charge of
+every decision that leaves the system.** It is a decision aid, not an autopilot.
 
-Render's free tier cold-starts after 15 minutes of inactivity — hit `/health` once and give it a
-few seconds before demoing if it's been idle. Data is synthetic seed data only (see
-`06_decisions/039-frontend-include-seed-data-for-demo.md`), reset via `npm run seed:demo`
-against the deployed database, not real client data.
+## What it does
 
-## Repo
+- **Reads public hiring data.** Greenhouse and Lever job boards (public, no API key), plus public
+  employer hiring records (H-1B LCA disclosures, SEC Form D filings, federal awards) as extra
+  evidence.
+- **Scores with transparent rules, not a black box.** Each posting gets a demand-evidence score and,
+  where it applies, a hard-to-fill signal. Every score shows its reasons and the weights version
+  that produced it.
+- **Explains itself in plain language.** Each opportunity card opens with a one-sentence verdict, a
+  stacked bar showing which clues moved the score, and a collapsed "Show the math" section with the
+  raw numbers.
+- **Matches candidates to roles** by skill overlap (a simple rule, not a prediction).
+- **Drafts a client-facing package and email** from templates. A person reviews, edits and clicks
+  Release. In this project releasing records the decision; nothing is actually sent.
+- **Teaches itself to new users** with a guided tour that navigates the real app and spotlights each
+  section.
 
-**https://github.com/lious19/talentsignal** (private — ask Megan for access). See
-`06_decisions/030-repo-visibility-and-history-strategy.md` for why private, full history.
+Screenshot placeholders (to be added in [`docs/screenshots/`](docs/screenshots/README.md)):
 
-## Architecture
+> 📷 **Login:** `docs/screenshots/login.png`
+>
+> 📷 **Overview:** `docs/screenshots/overview.png`
+>
+> 📷 **Opportunities card:** `docs/screenshots/opportunities-card.png`
+>
+> 📷 **Signals:** `docs/screenshots/signals.png`
+>
+> 📷 **Guided tour:** `docs/screenshots/guided-tour.png`
 
-- **Frontend:** React + Vite (`frontend/`)
-- **Backend:** Node/Express API (`backend/`), routes under `/api/*`
-- **Database:** PostgreSQL, SQL migrations run on boot (`backend/src/db/migrations/`)
-- **Deploy:** one Render Web Service, built from the top-level `Dockerfile` — a multi-stage
-  build that compiles the frontend (`vite build`) and backend (`tsc`) separately, then copies
-  both into a single runtime image. Express serves `/api/*` and the built frontend's static
-  files from that same process (decision 037). `backend/Dockerfile` still exists separately for
-  local `docker compose` use only — Render does not use it.
-- **External providers:** mocked behind adapter seams (`backend/src/adapters/`) — no real
-  outbound integration exists yet; see `CLAUDE.md`.
+## How it works
 
-## Local development setup
+```mermaid
+flowchart LR
+  subgraph Browser
+    FE["React + Vite frontend"]
+  end
+
+  subgraph Server["Node / Express API"]
+    API["/api routes: auth, scoring, matching, packages"]
+    GATE{{"Human release gate"}}
+  end
+
+  DB[("PostgreSQL: raw rows, scored opportunities, audit tables")]
+
+  subgraph Public["Public sources (no API keys)"]
+    GH["Greenhouse boards"]
+    LV["Lever boards"]
+    CAP["H-1B LCA, SEC Form D, federal awards"]
+  end
+
+  subgraph Mocked["Mocked or seeded behind adapter seams"]
+    MOCK["Mock and seed job-board providers"]
+    CRM["CRM write: local table only"]
+    NOTIFY["Pipeline notifier: log line only"]
+  end
+
+  INGEST["Manual ingest scripts"]
+
+  FE -->|HTTPS /api| API
+  API --> DB
+  API --> MOCK
+  API --> CRM
+  API --> NOTIFY
+  INGEST -->|fetch| GH
+  INGEST -->|fetch| LV
+  INGEST -->|fetch| CAP
+  INGEST -->|raw rows saved first, then parsed| DB
+  API -->|draft package| GATE
+  GATE -->|a person clicks Release| DB
+```
+
+- **Frontend:** React 18 + TypeScript + Vite ([`frontend/`](frontend/)).
+- **API:** Node + Express + TypeScript ([`backend/`](backend/)), routes under `/api/*`, JWT auth with
+  three roles (admin, sales, recruiter).
+- **Database:** PostgreSQL. SQL migrations run on boot ([`backend/src/db/migrations/`](backend/src/db/migrations/)).
+- **Ingestion:** manual scripts (`npm run ingest:once`, `npm run ingest:capacity-once`). Nothing polls
+  on a schedule.
+- **Adapter seams:** every external provider sits behind an interface
+  ([`backend/src/adapters/`](backend/src/adapters/)) so a real one can replace a mock without touching
+  the routes or the scoring.
+
+## The rules it is built under
+
+These are enforced in code and tests, not just written down.
+
+1. **Human release.** The software drafts and suggests; a person reviews and releases anything that
+   would leave the platform or write to a client record. Release is a guarded, once-only database
+   update with an audit row ([`backend/src/routes/opportunityPackage.ts`](backend/src/routes/opportunityPackage.ts)).
+2. **Live / seeded / stubbed labels.** The screen always says what kind of data it is showing:
+   a source is "live", "fixture" or "flagged, excluded"; demo candidates are labelled; placeholders
+   (resume parsing, response-rate tracking) say they are placeholders.
+3. **Raw-persist-before-parse.** Every fetched posting is written verbatim to `raw_requisitions`
+   before any parsing touches it, so nothing is lost if the parser is wrong
+   ([decision 041](06_decisions/041-raw-and-parsed-requisitions-schema.md)).
+4. **Version-stamped weights.** Every stored score records which weights produced it, such as
+   `confidence-007-v1` or `hard-to-fill-026-v3`, so an old score stays traceable after the weights
+   change ([decision 012](06_decisions/012-confidence-weight-versioning.md)).
+5. **Null results are valid.** "Not enough data" is an acceptable answer. The validation study
+   below reports *insufficient data* instead of forcing a conclusion, and empty screens say
+   "No data yet" instead of showing a zero that looks like a finding.
+
+Plus: heuristic first (no machine learning), no secrets in the repo, an explicit timeout on every
+outbound call, and structured JSON logs with a correlation id. The full list is in
+[`CLAUDE.md`](CLAUDE.md); each business-logic choice has its own entry in
+[`06_decisions/`](06_decisions/).
+
+## Honest findings
+
+- **The hard-to-fill score could not be validated yet.** The S-25 study asked whether a high score
+  predicts a longer time-to-fill. The high-score group had **4** requisitions against a declared
+  minimum of **20**, so the answer is *insufficient data*, not "it works" and not "it fails". No
+  weights were changed. Full write-up:
+  [`07_analyses/s25-hardness-validation-2026-10-06.md`](07_analyses/s25-hardness-validation-2026-10-06.md).
+- **A visual redesign quietly removed provenance, and the tests caught it.** After a restyle, 17
+  frontend tests failed. Eleven of them were not wording changes: the opportunity card had stopped
+  showing its factor breakdown, its weights version and its "how this was scored" facts. The fix was
+  to restore that content (now behind "Show the math"), not to loosen the tests.
+- **The same count appeared two different ways.** A number audit found "measured basis" shown as 180
+  on three screens and 155 on the opportunity cards, because some screens re-derived it in the
+  browser. All screens now show the stored value, and the finding is logged as a PROPOSED decision
+  ([decision 051](06_decisions/051-none-basis-fallthrough.md)). The audit itself:
+  [`07_analyses/number-audit-2026-11-03.md`](07_analyses/number-audit-2026-11-03.md).
+- **Known open issues, not fixed.** When many postings tie for the top score, the "top pick" can land
+  on a row from a source the app itself marks "flagged, excluded". Flagged-source rows also still carry
+  the hard-to-fill badge. Both touch ranking, which is a business decision, so they are written down
+  here instead of silently changed.
+
+## Status
+
+- **Local only.** There is no hosted demo and no public URL. Older decision records
+  ([`06_decisions/`](06_decisions/), for example 034, 036, 037, 038 and 042) describe an earlier hosted
+  deployment; treat those as project history.
+- **Tests (as of 2026-11-03):** frontend 114 tests, backend 468 tests when run against a real
+  Postgres (unit tests alone run without a database; integration tests skip themselves). CI runs on
+  every push ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+- **Data is demo data.** Candidate profiles are fixtures. Placement history and package examples are
+  seeded. Resume upload is a preview: files are not parsed.
+- **Nothing is sent.** Releasing a package records a decision. There is no email integration.
+
+## Run it locally
 
 **Prerequisites:** Git, Node.js 20, Docker Desktop.
 
 ```bash
-git clone https://github.com/lious19/talentsignal.git
+git clone https://github.com/ang3lmbenoun/talentsignal.git
 cd talentsignal
+cp .env.example .env        # then edit the values below
 ```
 
-**`.env` setup:** copy `.env.example` to `.env` and fill in real values. `NEW-CO_2.MD` (repo
-root) has a working template with every value filled in for local/dev use — copy that block
-directly if you have access to it. **The production `JWT_SECRET` and `ADMIN_BOOTSTRAP_PASSWORD`
-have been rotated for the live Render deploy and are intentionally not in this repo, in
-`.env.example`, or anywhere else committed** — generate your own local-only values (see
-`.env.example`'s comments; `openssl rand -base64 32` for `JWT_SECRET`).
+In `.env`, set at least:
+
+- `JWT_SECRET`, a long random value. Generate one with `openssl rand -base64 32`. The backend
+  refuses to start without it.
+- `ADMIN_EMAIL` and `ADMIN_BOOTSTRAP_PASSWORD`, only if you want a bootstrap admin account.
+- The database settings already have local defaults. See the comments in [`.env.example`](.env.example).
+
+Never commit `.env` (it is git-ignored). Then:
 
 ```bash
-docker compose up -d --build
-cd backend && npm ci && npm run seed:demo
-cd ../frontend && npm ci && npm run dev
+docker compose up -d --build        # database, API (runs migrations on boot), frontend
+cd backend && npm ci
+DATABASE_URL="postgres://<user>:<password>@localhost:5433/<db>" npm run seed:demo   # optional demo data
 ```
 
-- Backend: `http://localhost:4000`
-- Frontend: `http://localhost:5173`
-- Postgres: `localhost:5433` (mapped from the container's 5432 — see `.env.example` for why)
+- Frontend: <http://localhost:5173>
+- API: <http://localhost:4000> (health check at `/api/health`)
+- Postgres: `localhost:5433` (host port; the container uses 5432)
 
-**Login:** `admin@talentsignal.local` / (see your own `.env`'s `ADMIN_BOOTSTRAP_PASSWORD` — not
-a fixed value, and not the same as whatever's set on the live Render deploy).
+To pull real public postings instead of the demo data, set `GREENHOUSE_BOARDS` and
+`LEVER_COMPANIES` in `.env` and run `npm run ingest:once` from `backend/` (with the same
+`DATABASE_URL`).
 
-## Running tests
+**Tests**
 
 ```bash
-cd backend && npm test        # unit only — integration/E2E self-skip without DATABASE_URL
+cd backend && npm test        # unit tests; integration/E2E skip without DATABASE_URL
 cd frontend && npm test
 ```
 
-Set `DATABASE_URL` (pointing at a real, migrated Postgres — e.g. `docker compose up -d db`) to
-also run the integration and end-to-end suites, matching what CI runs on every push.
+Set `DATABASE_URL` to a real, migrated Postgres to run the integration and end-to-end suites too.
 
-## Deployment
-
-See **[`ONBOARDING.md`](./ONBOARDING.md)** for the one-page orientation, and
-`06_decisions/037-revert-to-single-service.md` / `038-database-ssl-reject-unauthorized.md` for
-the Render-specific deploy details (env vars, managed Postgres SSL, trust proxy).
-
-## Where to start reading
-
-- **`CLAUDE.md`** — how an AI agent (or a new engineer) should operate in this repo: the
-  human-release rule, one-story-at-a-time discipline, decision-logging requirement, definition
-  of done.
-- **`00_scope/scope.md`** — the captured spec. Start here for *what* the platform does.
-- **`00_scope/stories/`** — per-story acceptance criteria (Gherkin): `S-01.md` through `S-19.md`,
-  plus `HF-1.md`. (No `S-20.md`/`HF-2`/`HF-3` story files exist yet — those releases were
-  synthesized from Ali's meeting notes and Basecamp comments directly; see the relevant
-  `06_decisions/` entries for each.)
-- **`06_decisions/`** — one entry per business-logic judgment call, in plain English, with what
-  it rests on and what would make it wrong. `06_decisions/README.md` is the template + open-items
-  index.
-- **`05_presentations/`** — per-story build summaries and demo evidence (screenshots, load-test
-  results), written for the weekly class demo.
-
-## Repo layout
+## Repo map
 
 ```
-00_scope/           Captured spec + per-story acceptance criteria
-06_decisions/        Decision log
-07_meeting_notes/    Ali + instructor conversation notes
-05_presentations/    Weekly class demo material, per-story summaries
-frontend/            React front end
-backend/             Node/Express API
-  backend/src/db/      SQL migrations + migration runner
-  backend/src/adapters/  Mocked external provider seams
-  backend/tests/       Unit, integration, and E2E tests
-Dockerfile           Top-level, multi-stage — what Render deploys (decision 037)
-docker-compose.yml   Local dev only
-.github/workflows/   CI (migrations -> unit -> integration -> E2E -> tsc -> lint)
+README.md              This case study
+ONBOARDING.md          One-page orientation for a new builder
+CLAUDE.md              The operating rules the build follows (human release, decision logging, definition of done)
+GAME_PLAN.md           Early planning notes
+00_scope/              The captured spec and per-story acceptance criteria (Gherkin)
+06_decisions/          One entry per business-logic choice: what it rests on, what would make it wrong
+07_analyses/           Validation and audit write-ups (S-25 study, number audit)
+07_meeting_notes/      Working notes from project check-ins
+05_presentations/      Per-story build summaries and demo evidence
+docs/screenshots/      Where the README's five screenshots go (not captured yet)
+frontend/              React + Vite app
+backend/               Express API
+  src/adapters/          Provider seams: public sources and mocks
+  src/scoring/           Transparent scoring rules and versioned weights
+  src/db/migrations/     SQL migrations, run on boot
+  tests/                 Unit, integration and end-to-end tests
+Dockerfile             Top-level multi-stage image (frontend + API)
+docker-compose.yml     Local development stack
+.env.example           Template for the local .env (blank secrets)
+.github/workflows/     CI
+BusinessAnalysis_FieldGuide.html   Standalone business-analyst field guide (self-contained HTML)
+talentsignal-dashboard.html        UI mockups the redesign was matched against
+talentsignal-redesign.html
+login.json, nouser.json,           Old hand-made request bodies for trying the login/register
+reg.json, wrongpw.json             endpoints with curl (throwaway demo accounts, S-02). No test or
+                                   script uses them; decision 030 notes them as a leftover to remove.
 ```
 
-## Who to ask
+## What's next
 
-- **Ali Muwwakkil** — approvals, business-logic decisions, phase gates.
-- **Megan** — build owner.
+- **An LLM explainer is a PROPOSED idea, not built.** Today no language model is called anywhere in
+  the code: verdict sentences, package drafts and email drafts are all deterministic templates. A
+  future explainer could rewrite the existing, already-computed facts in friendlier language. It would
+  be added behind the same adapter seam and the same human-release rule, and it would need its own
+  decision-log entry before any code.
+- Decide the two ranking issues above (flagged sources and the top pick).
+- Rescore the 28 postings still on the oldest weights so stored and derived values agree
+  ([decision 051](06_decisions/051-none-basis-fallthrough.md)).
+- Re-run the S-25 validation as more requisitions accumulate and close.
+- Real resume parsing and a client-creation screen (both deferred).
