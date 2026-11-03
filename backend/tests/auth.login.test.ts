@@ -19,6 +19,7 @@ describe("POST /api/auth/login", () => {
     expect(res.body.user).toEqual({
       id: expect.any(String),
       email: CREDENTIALS.email,
+      displayName: null,
       role: "sales",
     });
 

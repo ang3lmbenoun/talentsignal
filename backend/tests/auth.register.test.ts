@@ -17,6 +17,7 @@ describe("POST /api/auth/register", () => {
     expect(res.body).toEqual({
       id: expect.any(String),
       email: "new.user@example.com",
+      displayName: null,
       role: "sales",
     });
     expect(res.body.password_hash).toBeUndefined();

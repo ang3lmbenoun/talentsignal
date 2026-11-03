@@ -5,6 +5,8 @@ export interface FakeUserRow {
   id: string;
   email: string;
   password_hash: string;
+  // Migration 023 added users.display_name (nullable); new rows start NULL.
+  display_name: string | null;
   role: string;
 }
 
@@ -30,12 +32,12 @@ export function createFakeUsersPool() {
         err.code = "23505";
         throw err;
       }
-      const row: FakeUserRow = { id: String(nextId++), email, password_hash: passwordHash, role };
+      const row: FakeUserRow = { id: String(nextId++), email, password_hash: passwordHash, display_name: null, role };
       rows.push(row);
       return { rows: [row] };
     }
 
-    if (sql.includes("SELECT id, email, password_hash, role FROM users")) {
+    if (sql.includes("SELECT id, email, password_hash, display_name, role FROM users")) {
       const [email] = params as [string];
       const match = rows.find((r) => r.email.toLowerCase() === email.toLowerCase());
       return { rows: match ? [match] : [] };
