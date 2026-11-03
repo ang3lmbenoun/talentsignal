@@ -37,6 +37,8 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { clearStoredToken, getStoredToken, getStoredEmail, storeDisplayName, storeEmail } from "./auth";
 import { getStoredSidebarState, storeSidebarState } from "./sidebarState";
+import { OnboardingTour } from "./components/OnboardingTour";
+import { getTourUserId, hasSeenTour, markTourSeen } from "./lib/onboardingTour";
 
 type HealthState =
   | { status: "loading" }
@@ -45,13 +47,20 @@ type HealthState =
 
 type AuthView = "login" | "register";
 
-export function App() {
+interface AppProps {
+  // Opt-in: main.tsx turns the first-run tour on; everything that renders
+  // <App /> without it (including the existing tests) never sees the tour.
+  onboarding?: boolean;
+}
+
+export function App({ onboarding = false }: AppProps = {}) {
   const [health, setHealth] = useState<HealthState>({ status: "loading" });
   // Lazy initializer (the () => ... form) runs getStoredToken() once, on
   // the first render only — not on every re-render the way `useState(getStoredToken())`
   // would call it.
   const [token, setToken] = useState<string | null>(() => getStoredToken());
   const [authView, setAuthView] = useState<AuthView>("login");
+  const [tourOpen, setTourOpen] = useState(false);
   // Which screen the sidebar nav is currently showing. Every screen stays
   // mounted (so it keeps fetching and so the role-gating tests still see it);
   // only the active one is visible — the others carry the `hidden` attribute.
@@ -116,7 +125,26 @@ export function App() {
     };
   }, [token]);
 
+  // First-run tour: once the user is authenticated, open it if this user id
+  // has no "seen" flag yet. Runs again when the token changes, so signing in
+  // as a different user re-checks that user's own flag.
+  useEffect(() => {
+    if (!onboarding || !token) return;
+    const userId = getTourUserId(token);
+    if (userId && !hasSeenTour(userId)) setTourOpen(true);
+  }, [onboarding, token]);
+
+  // Called for "Get started", "Skip tour" and Escape alike. It only ever SETS
+  // the seen flag, so replaying the tour from the header can't make it
+  // auto-open again later.
+  function closeTour() {
+    const userId = getTourUserId(token);
+    if (userId) markTourSeen(userId);
+    setTourOpen(false);
+  }
+
   function handleLogout() {
+    setTourOpen(false);
     clearStoredToken();
     setToken(null);
     setAuthView("login");
@@ -220,7 +248,12 @@ export function App() {
       </Sidebar>
 
       <div className="app-main">
-        <TopBar health={healthPill} email={getStoredEmail()} onLogout={handleLogout} />
+        <TopBar
+          health={healthPill}
+          email={getStoredEmail()}
+          onLogout={handleLogout}
+          onTakeTour={onboarding ? () => setTourOpen(true) : undefined}
+        />
 
         <main className="content">
           {/* Role gates per 06_decisions/022's permission matrix — UX only,
@@ -300,6 +333,7 @@ export function App() {
           </div>
         </main>
       </div>
+      {onboarding && tourOpen && <OnboardingTour onClose={closeTour} />}
     </div>
   );
 }
