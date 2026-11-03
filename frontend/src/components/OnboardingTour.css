@@ -1,0 +1,93 @@
+/* Onboarding tour. Lives in its own file so theme.css (tokens, fonts) stays
+   untouched; everything here only READS the existing CSS variables, so it
+   follows light/dark mode automatically. */
+
+.tour-overlay{
+  position:fixed; inset:0; z-index:1000;
+  display:flex; align-items:center; justify-content:center;
+  padding:var(--space-4);
+  background:rgba(13,19,26,.55);
+  animation:tour-fade .18s ease-out;
+}
+.tour-card-shell{
+  width:min(100%,520px); max-height:calc(100vh - 32px); overflow:auto;
+  background:var(--surface); color:var(--text);
+  border:1px solid var(--border); border-radius:calc(var(--radius) + 4px);
+  box-shadow:var(--shadow-hover);
+  padding:var(--space-5);
+  animation:tour-rise .22s ease-out;
+}
+.tour-card-shell:focus{ outline:none; }
+.tour-step-count{ margin:0 0 var(--space-3); font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--mute); }
+.tour-body{ animation:tour-fade .18s ease-out; }
+.tour-body h2{ margin:var(--space-4) 0 var(--space-3); font-size:22px; line-height:1.2; letter-spacing:-.02em; }
+.tour-line{ margin:0 0 var(--space-3); font-size:14px; line-height:1.55; color:var(--mute); }
+.tour-line b{ display:block; margin-bottom:2px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); }
+
+/* ---- static preview sketches ---- */
+.tour-preview{
+  position:relative; min-height:96px; display:flex; align-items:center; justify-content:center;
+  padding:var(--space-5) var(--space-4) var(--space-4);
+  background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius);
+}
+.tour-preview-tag{ position:absolute; top:6px; right:10px; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--mute); }
+.tour-chip{ display:inline-block; padding:3px 9px; font-size:11px; font-weight:600; border:1px solid var(--border); border-radius:999px; background:var(--surface); color:var(--text); }
+.tour-chip--accent{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+.tour-flow{ display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; justify-content:center; }
+.tour-flow-arrow{ color:var(--mute); }
+.tour-tiles{ display:grid; grid-template-columns:repeat(3,1fr); gap:var(--space-2); width:100%; }
+.tour-tile{ padding:var(--space-3); background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+.tour-tile i{ display:block; width:50%; height:6px; border-radius:3px; background:var(--border); margin-bottom:8px; }
+.tour-tile b{ display:block; width:36%; height:14px; border-radius:3px; background:var(--accent); }
+.tour-bars{ display:grid; gap:var(--space-2); width:100%; }
+.tour-bar{ height:10px; border-radius:5px; background:var(--border); overflow:hidden; }
+.tour-bar span{ display:block; height:100%; border-radius:5px; background:var(--accent); }
+.tour-card{ display:flex; align-items:center; gap:var(--space-3); width:100%; padding:var(--space-3); background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+.tour-ring{ flex:0 0 34px; width:34px; height:34px; border-radius:50%; border:4px solid var(--accent); border-right-color:var(--border); }
+.tour-card-lines{ flex:1; display:grid; gap:6px; }
+.tour-card-lines b{ display:block; width:60%; height:8px; border-radius:4px; background:var(--text); opacity:.7; }
+.tour-card-lines i{ display:block; width:85%; height:6px; border-radius:3px; background:var(--border); }
+.tour-rows{ display:grid; gap:var(--space-2); width:100%; }
+.tour-row{ display:flex; align-items:center; gap:var(--space-3); padding:var(--space-2) var(--space-3); background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+.tour-row i{ flex:1; height:6px; border-radius:3px; background:var(--border); }
+.tour-avatar{ flex:0 0 22px; width:22px; height:22px; border-radius:50%; background:var(--accent-soft); border:1px solid var(--accent); }
+.tour-draft{ display:grid; gap:var(--space-2); width:100%; padding:var(--space-3); background:var(--surface); border:1px solid var(--border); border-radius:8px; justify-items:start; }
+.tour-draft-lines{ display:grid; gap:6px; width:100%; }
+.tour-draft-lines i{ display:block; height:6px; border-radius:3px; background:var(--border); }
+.tour-draft-lines i:nth-child(2){ width:80%; }
+.tour-draft-lines i:nth-child(3){ width:55%; }
+.tour-button-sketch{ justify-self:end; padding:3px 12px; font-size:11px; font-weight:600; border-radius:6px; background:var(--accent); color:#fff; }
+.tour-checks{ list-style:none; margin:0; padding:0; display:grid; gap:var(--space-2); width:100%; }
+.tour-checks li{ display:flex; align-items:center; gap:var(--space-3); }
+.tour-checks span{ flex:0 0 16px; width:16px; height:16px; border-radius:50%; background:var(--success); }
+.tour-checks i{ flex:1; height:6px; border-radius:3px; background:var(--border); }
+
+/* ---- progress dots + actions ---- */
+.tour-dots{ list-style:none; display:flex; justify-content:center; gap:var(--space-2); margin:var(--space-4) 0; padding:0; }
+.tour-dot{ width:8px; height:8px; border-radius:50%; background:var(--border); transition:background .18s, transform .18s; }
+.tour-dot--on{ background:var(--accent); transform:scale(1.25); }
+.tour-actions{ display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); }
+.tour-nav{ display:flex; gap:var(--space-2); }
+.tour-btn{
+  padding:8px 16px; font:inherit; font-size:14px; font-weight:600; cursor:pointer;
+  color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:8px;
+}
+.tour-btn:hover{ background:var(--surface-2); }
+.tour-btn--primary{ color:#fff; background:var(--accent); border-color:var(--accent); }
+.tour-btn--primary:hover{ background:var(--accent-hover); border-color:var(--accent-hover); }
+.tour-skip{ padding:8px 4px; font:inherit; font-size:13px; cursor:pointer; color:var(--mute); background:none; border:none; }
+.tour-skip:hover{ color:var(--text); text-decoration:underline; }
+.tour-btn:focus-visible, .tour-skip:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+@keyframes tour-fade{ from{ opacity:0; } to{ opacity:1; } }
+@keyframes tour-rise{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:none; } }
+
+/* Respect the OS "reduce motion" setting: no animation or transitions at all. */
+@media (prefers-reduced-motion: reduce){
+  .tour-overlay, .tour-card-shell, .tour-body{ animation:none; }
+  .tour-dot{ transition:none; }
+}
+
+/* "Take the tour" link in the top bar (rendered by TopBar, styled here to keep
+   theme.css untouched). */
+.topbar-tour-link{ display:inline-flex; align-items:center; gap:6px; font-size:13px; white-space:nowrap; }

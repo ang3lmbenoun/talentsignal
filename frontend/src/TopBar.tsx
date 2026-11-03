@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Check, ChevronDown, Moon, Save, Sun, UserRound, X } from "lucide-react";
+import { Check, ChevronDown, CircleHelp, Moon, Save, Sun, UserRound, X } from "lucide-react";
 import { applyTheme, getStoredTheme, storeTheme, type Theme } from "./theme";
 import { getStoredDisplayName, getStoredRole, getStoredToken, storeDisplayName, storeEmail } from "./auth";
 
@@ -9,6 +9,9 @@ interface TopBarProps {
   health: ReactNode;
   email: string | null;
   onLogout: () => void;
+  // Replays the onboarding tour. Omitted when the tour is disabled, in which
+  // case the link is not rendered at all.
+  onTakeTour?: () => void;
 }
 
 function roleLabel(role: string | null): string | null {
@@ -16,7 +19,7 @@ function roleLabel(role: string | null): string | null {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
-export function TopBar({ health, email, onLogout }: TopBarProps) {
+export function TopBar({ health, email, onLogout, onTakeTour }: TopBarProps) {
   // Lazy initializer reads the attribute main.tsx already applied before
   // mount (see theme.ts), so this never disagrees with what's on screen.
   const [theme, setTheme] = useState<Theme>(() => getStoredTheme());
@@ -125,6 +128,11 @@ export function TopBar({ health, email, onLogout }: TopBarProps) {
     <header className="topbar">
       <div className="topbar-health">{health}</div>
       <div className="topbar-user">
+        {onTakeTour && (
+          <button type="button" className="btn-link topbar-tour-link" onClick={onTakeTour}>
+            <CircleHelp size={15} aria-hidden="true" /> Take the tour
+          </button>
+        )}
         <button
           type="button"
           onClick={toggleTheme}
