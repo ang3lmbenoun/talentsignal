@@ -170,6 +170,9 @@ export function CandidatesScreen() {
 
   const candidates = state.status === "ok" ? state.candidates : [];
   const totalCandidates = candidates.length;
+  // Profiles loaded from the fixture file carry a "Fixture Candidate" name
+  // prefix; saying how many are demo data keeps the count honest.
+  const fixtureCount = candidates.filter((c) => /^Fixture Candidate/i.test(c.name)).length;
   // "Available now": a real, disclosed substring rule over the free-text
   // availability field (no enum exists for it) -- never a guess at intent
   // beyond what the text itself says.
@@ -199,19 +202,19 @@ export function CandidatesScreen() {
         <div className="opportunity-kpi-tile">
           <div className="opportunity-kpi-label">Total candidates</div>
           <div className="opportunity-kpi-value">{totalCandidates}</div>
-          <p className="opportunity-kpi-why">Profiles currently in the candidate pool.</p>
+          <p className="opportunity-kpi-why">Profiles currently in the candidate pool{fixtureCount > 0 ? `; ${fixtureCount} ${fixtureCount === 1 ? "is a demo (fixture) profile" : "are demo (fixture) profiles"}` : ""}.</p>
         </div>
         <div className="opportunity-kpi-tile">
           <div className="opportunity-kpi-label">Available now</div>
           <div className="opportunity-kpi-value opportunity-kpi-value--accent">{availableNow}</div>
-          <p className="opportunity-kpi-why">Profiles marked available now; availability can be missing.</p>
+          <p className="opportunity-kpi-why">Profiles whose availability text says “now” or “immediate”; availability can be missing.</p>
         </div>
         <div className="opportunity-kpi-tile">
-          <div className="opportunity-kpi-label">Avg. skills matched</div>
+          <div className="opportunity-kpi-label">Avg. skills in common with best job</div>
           <div className="opportunity-kpi-value" title="Average real skill overlap with the best-matching job opening on file, per candidate.">
-            {jobOpenings.length > 0 ? avgSkillsMatched : "—"}
+            {jobOpenings.length > 0 ? avgSkillsMatched : "No data yet"}
           </div>
-          <p className="opportunity-kpi-why">Average skill overlap with each candidate’s best listed job; unavailable when no jobs exist.</p>
+          <p className="opportunity-kpi-why">Average number of skills each candidate shares with their best-matching job opening. Shows “No data yet” when no job openings are on file.</p>
         </div>
       </div>
 

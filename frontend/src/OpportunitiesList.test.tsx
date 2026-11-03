@@ -170,7 +170,7 @@ describe("OpportunitiesList", () => {
     // Exactly one "GitLab" heading, not three — the "GitLab GitLab GitLab"
     // complaint this redesign exists to fix.
     expect(screen.getAllByRole("heading", { name: "GitLab" })).toHaveLength(1);
-    expect(screen.getByText("Open requisitions · n=3")).toBeInTheDocument();
+    expect(screen.getByText("Open requisitions · 3")).toBeInTheDocument();
     // The flat card grid (rank badges, "Show raw payload") isn't rendered
     // in the default view at all.
     expect(screen.queryByText("#1")).not.toBeInTheDocument();
@@ -183,7 +183,7 @@ describe("OpportunitiesList", () => {
 
     // "Back to companies" returns to the grouped landing.
     fireEvent.click(screen.getByRole("button", { name: "Back to companies" }));
-    await waitFor(() => expect(screen.getByText("Open requisitions · n=3")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Open requisitions · 3")).toBeInTheDocument());
   });
 
   it("shows an unauthenticated message when the stored token is rejected", async () => {

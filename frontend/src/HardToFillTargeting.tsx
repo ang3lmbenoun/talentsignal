@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Flame, Users, Target as TargetIcon, Percent, type LucideIcon } from "lucide-react";
+import { Flame, Target as TargetIcon, Percent, type LucideIcon } from "lucide-react";
 import { getStoredToken } from "./auth";
+import { ShowTheMath } from "./components/ShowTheMath";
 
 interface Student {
   id: string;
@@ -58,7 +59,6 @@ function KpiTile({
       </div>
       <span className="kpi-tile-value mono">{value}</span>
       {caption && <p className="kpi-tile-caption">{caption}</p>}
-      <p className="kpi-tile-trend">A trend appears after at least four weeks of history.</p>
       <p className="kpi-tile-why">Why it matters: {why}</p>
     </div>
   );
@@ -175,7 +175,7 @@ function TargetRoleCard({ target }: { target: Target }) {
           </div>
         </div>
         <span className="opportunity-age-badge opportunity-age-badge--red" title="Role-difficulty indicator for review; not a probability of hiring">
-          {Math.round(target.hardToFillScore * 100)}% role-difficulty signal
+          Difficulty signal {Math.round(target.hardToFillScore * 100)} of 100
         </span>
       </div>
 
@@ -333,13 +333,6 @@ export function HardToFillTargeting() {
           caption={`${targets.length} requisitions in this view`}
         />
         <KpiTile
-          icon={Users}
-          value={String(totalStudents)}
-          label="Fit comparisons"
-          why="candidate-to-role comparisons across the roles shown below"
-          caption={`${totalStudents} comparisons · one candidate can appear for multiple roles`}
-        />
-        <KpiTile
           icon={TargetIcon}
           value={comparableTargets.length > 0 ? `${Math.round(topFitAcrossAll * 100)}%` : "—"}
           label="Closest available candidate fit"
@@ -348,12 +341,19 @@ export function HardToFillTargeting() {
         />
         <KpiTile
           icon={Percent}
-          value={`${Math.round(avgHardToFill * 100)}%`}
-          label="Average role-difficulty signal"
+          value={`${Math.round(avgHardToFill * 100)} of 100`}
+          label="Average difficulty signal among flagged roles"
           why="average indicator across flagged roles; it is not a probability that a role will be filled"
           caption={`Across ${targets.length} flagged roles`}
         />
       </div>
+
+      <p className="trend-note">A trend appears after at least four weeks of history, which is not available yet.</p>
+
+      <ShowTheMath>
+        <p><b>Fit comparisons: {totalStudents}</b>. Candidate-to-role comparisons across the roles shown below; one candidate can appear for multiple roles.</p>
+        <p><b>Difficulty signal</b> is shown out of 100 and is capped at 100. It is an indicator for review, not a probability that a role will be filled.</p>
+      </ShowTheMath>
 
       {/* The whole point of the trust scenario (HF-3): this is a SUGGESTION.
           A human decides who to submit; the app never submits anyone. There is
@@ -364,9 +364,9 @@ export function HardToFillTargeting() {
       </p>
 
       <div className="filterbar targeting-filters" aria-label="Filter target roles">
-        <input className="select" type="search" placeholder="Search role or client" aria-label="Search role or client" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <select className="select" aria-label="Filter by client" value={client} onChange={(event) => setClient(event.target.value)}>
-          <option value="all">All clients</option>{clients.map((name) => <option key={name} value={name}>{name}</option>)}
+        <input className="select" type="search" placeholder="Search role or company" aria-label="Search role or company" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <select className="select" aria-label="Filter by company" value={client} onChange={(event) => setClient(event.target.value)}>
+          <option value="all">All companies</option>{clients.map((name) => <option key={name} value={name}>{name}</option>)}
         </select>
         <select className="select" aria-label="Filter by candidate evidence" value={fitEvidence} onChange={(event) => setFitEvidence(event.target.value)}>
           <option value="all">All fit evidence</option><option value="available">Fit can be assessed</option><option value="unavailable">Fit unavailable</option>

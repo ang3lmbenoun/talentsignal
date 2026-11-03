@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Briefcase, Flame, Building2, Users, ArrowLeft, type LucideIcon } from "lucide-react";
+import { Briefcase, Flame, Building2, ArrowLeft, type LucideIcon } from "lucide-react";
 import { getStoredToken } from "./auth";
 import { classifyFamily } from "./lib/basisDerivation";
 import { computeClientAggregates, clientWhyItMatters, type ClientOpportunity } from "./lib/clientAggregation";
@@ -653,8 +653,8 @@ function OpportunityCard({
 
         <div className="opportunity-score-wrap">
           <ConfidenceRing percent={confidencePct} />
-          <span>Demand evidence · {confidencePct}%</span>
-          <small>How strongly this posting shows unmet hiring demand · n=1</small>
+          <span>Demand evidence</span>
+          <small>How strongly this posting shows unmet hiring demand · based on one requisition</small>
         </div>
 
         <div className="opportunity-card-badges">
@@ -678,7 +678,7 @@ function OpportunityCard({
 
         <div className="opportunity-card-pills">
           <span className="opportunity-pill">Source: {opportunity.source === "greenhouse" ? "Greenhouse · live" : opportunity.source === "lever" ? "Lever · flagged — excluded" : `${opportunity.source} · fixture`}</span>
-          <span className={`opportunity-basis-dot opportunity-basis-dot--${basis}`} title={`Evidence basis: ${basis}`}>
+          <span className={`opportunity-basis-dot opportunity-basis-dot--${basis}`} title={`Evidence basis as stored: ${basis}`}>
             {basis === "measured" ? "Observed posting data · measured" : basis === "curated" ? "Role guidance · curated" : "No role-scarcity evidence · none"}
           </span>
         </div>
@@ -687,7 +687,8 @@ function OpportunityCard({
             strings (rank, confidence %, joined reasons, source, hard-to-fill
             reason) so a score is never shown without its why. */}
         <p className="opportunity-legacy-summary">
-          <span>#{rank}</span> <span>{confidencePct}% confidence</span>
+          <span title="Position in this list; it changes when you filter">#{rank}</span> <span>in this list</span>{" "}
+          <span>{confidencePct}% confidence</span>
           {" — "}
           <span>{opportunity.reasons.join(", ")}</span>
           {" · "}
@@ -825,12 +826,12 @@ function CompanyRow({
           </span>
         </div>
         <div className="row package-signal-strip">
-          <span className="opportunity-pill">Open requisitions · n={aggregate.openReqs}</span>
+          <span className="opportunity-pill">Open requisitions · {aggregate.openReqs}</span>
           <span className="opportunity-pill">Typical age · {aggregate.medianDaysOpen?.toLocaleString() ?? "not available"} days (median{aggregate.verdict === "flagged — excluded" ? "; flagged source" : ""})</span>
-          <span className="opportunity-pill">Roles flagged hard to fill · n={aggregate.hardToFillCount}</span>
+          <span className="opportunity-pill">Roles flagged hard to fill · {aggregate.hardToFillCount}</span>
           {chips.map((chip) => (
             <span className="opportunity-pill" key={chip.label}>
-              {chip.label} · n={chip.count}
+              {chip.label} · {chip.count}
             </span>
           ))}
         </div>
@@ -865,7 +866,7 @@ function CompanyGroupedLanding({
     <>
       <div className="between">
         <p className="caption">
-          {aggregates.length} compan{aggregates.length === 1 ? "y" : "ies"} feeding {opportunities.length} loaded
+          Companies in postings: {aggregates.length}, feeding {opportunities.length} loaded
           opportunities.
         </p>
         <button type="button" className="btn" onClick={onViewAll}>
@@ -902,7 +903,6 @@ export function OpportunitiesList() {
   // block or error the opportunities screen if they fail, and never shown
   // as a guessed/sample number.
   const [clientCount, setClientCount] = useState<number | undefined>(undefined);
-  const [candidateCount, setCandidateCount] = useState<number | undefined>(undefined);
   // S-26: default landing is the company-grouped summary, not the flat
   // grid — "grid" is reached either by opening a company row (which also
   // sets companyFilter) or by the explicit "view all" escape hatch.
@@ -965,18 +965,6 @@ export function OpportunitiesList() {
         // because this secondary fetch did.
       });
 
-    fetch("/api/candidates", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => (res.ok ? (res.json() as Promise<{ candidates?: unknown[] }>) : null))
-      .then((body) => {
-        if (!cancelled && body && Array.isArray(body.candidates)) {
-          setCandidateCount(body.candidates.length);
-        }
-      })
-      .catch(() => {
-        // Best-effort KPI only -- the opportunities screen must not fail
-        // because this secondary fetch did.
-      });
-
     return () => {
       cancelled = true;
     };
@@ -998,6 +986,13 @@ export function OpportunitiesList() {
   const sortedOpportunities = sortOpportunities(allOpportunities);
   const topPickId = findTopPick(allOpportunities);
   const hardToFillCount = allOpportunities.filter((o) => o.hardToFill).length;
+  // "Greenhouse 307 · Lever 817": computed from the loaded rows.
+  const sourceTotals = new Map<string, number>();
+  for (const o of allOpportunities) sourceTotals.set(o.source, (sourceTotals.get(o.source) ?? 0) + 1);
+  const sourceBreakdown = [...sourceTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([source, count]) => `${source === "greenhouse" ? "Greenhouse" : source === "lever" ? "Lever" : source} ${count.toLocaleString()}`)
+    .join(" · ");
 
   const filteredOpportunities = sortedOpportunities.filter((o) => {
     if (titleSearch.trim() && !`${o.title ?? ""} ${o.company}`.toLowerCase().includes(titleSearch.trim().toLowerCase())) return false;
@@ -1029,10 +1024,9 @@ export function OpportunitiesList() {
         <p>Start with a client, then open a role to see its demand signals, score basis, and candidate-fit guidance.</p>
       </header>
       <div className="opportunity-kpi-strip">
-        <KpiTile label="Open requisitions" value={allOpportunities.length} icon={Briefcase} context={`n=${allOpportunities.length} loaded postings`} why="Job postings currently loaded from connected sources." />
-        <KpiTile label="Hard-to-fill signals" value={hardToFillCount} icon={Flame} accent context={`n=${hardToFillCount} of ${allOpportunities.length} loaded postings`} why="Roles matching the app’s current difficulty indicators; verify the evidence before prioritizing." />
-        <KpiTile label="Client profiles" value={clientCount} icon={Building2} context={`n=${clientCount ?? "not available"} client records`} why="Client records your team has added. This is separate from company names found in job postings." />
-        <KpiTile label="Candidate profiles" value={candidateCount} icon={Users} context={`n=${candidateCount ?? "not available"} profiles`} why="Candidate profiles currently available for matching." />
+        <KpiTile label="Open requisitions" value={allOpportunities.length} icon={Briefcase} context={sourceBreakdown || "loaded postings"} why="Job postings currently loaded from connected sources." />
+        <KpiTile label="Hard-to-fill signals" value={hardToFillCount} icon={Flame} accent context={`of ${allOpportunities.length.toLocaleString()} loaded postings`} why="Roles matching the app’s current difficulty indicators; verify the evidence before prioritizing." />
+        <KpiTile label="Client records (CRM)" value={clientCount} icon={Building2} context="rows in the CRM clients table" why="Client records your team has added in the CRM. Separate from the companies in postings, which are counted on the Clients screen." />
       </div>
 
       {view === "grouped" && (
@@ -1057,9 +1051,9 @@ export function OpportunitiesList() {
         <ArrowLeft size={14} aria-hidden="true" /> Back to companies
       </button>
       <div className="filterbar">
-        <input className="select opportunity-search" type="search" aria-label="Search role or client" placeholder="Search roles or clients" value={titleSearch} onChange={(e) => { setTitleSearch(e.target.value); setVisibleCount(PAGE_SIZE); }} />
+        <input className="select opportunity-search" type="search" aria-label="Search role or company" placeholder="Search roles or companies" value={titleSearch} onChange={(e) => { setTitleSearch(e.target.value); setVisibleCount(PAGE_SIZE); }} />
         <select className="select" value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setVisibleCount(PAGE_SIZE); }}>
-          <option value={ALL_FILTER}>All client companies</option>
+          <option value={ALL_FILTER}>All companies in postings</option>
           {companies.map((c) => (
             <option key={c} value={c}>{c}</option>
           ))}
@@ -1093,7 +1087,7 @@ export function OpportunitiesList() {
       <div className="opportunity-method-note" role="note">
         <b>How to read these indicators</b>
         <span><strong>Demand evidence</strong> combines the posting itself, time open, reposting, and salary visibility. Its percentage is a signal-strength indicator, not a chance of hire.</span>
-        <span><strong>Hard-to-fill</strong> is a separate role-difficulty clue using role type and supporting evidence. It is a heuristic for review, not a guarantee. Each card is one requisition (n=1).</span>
+        <span><strong>Hard-to-fill</strong> is a separate role-difficulty clue using role type and supporting evidence. It is a heuristic for review, not a guarantee. Each card is one requisition.</span>
       </div>
       {filteredOpportunities.some((opportunity) => opportunity.source === "lever") && (
         <div className="opportunity-source-caution" role="note">
@@ -1103,7 +1097,7 @@ export function OpportunitiesList() {
       )}
 
       <p className="caption opportunities-filter-count">
-        Showing {filteredOpportunities.length} of {allOpportunities.length} loaded requisitions · prioritized by the hard-to-fill signal
+        Showing {visibleOpportunities.length} of {filteredOpportunities.length} matching requisitions ({allOpportunities.length} loaded) · prioritized by the hard-to-fill signal
       </p>
 
       <ul aria-label="opportunities" className="opportunities-grid">
@@ -1122,7 +1116,7 @@ export function OpportunitiesList() {
           className="opportunities-load-more"
           onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
         >
-          Load more ({visibleCount} of {filteredOpportunities.length})
+          Load more
         </button>
       )}
         </>

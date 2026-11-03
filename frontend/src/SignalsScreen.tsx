@@ -4,14 +4,20 @@ import {
   type BasisOpportunity,
   effectiveFamily,
   extractDaysOpen,
-  computeMeasuredEligibleFamilies,
-  effectiveBasis as sharedEffectiveBasis,
   computeSourceHealth,
 } from "./lib/basisDerivation";
+import { summarizeStoredBasis, BASIS_AS_STORED_TOOLTIP } from "./lib/storedBasis";
+import { ShowTheMath } from "./components/ShowTheMath";
 
 interface Opportunity extends BasisOpportunity {
   company: string;
+  // null/absent until the repost-detection diff has run for this row.
+  diffComputedAt?: string | null;
 }
+
+// Share of a role type's postings one source must supply before the "Why this
+// matters" sentence names that source. Unchanged value (was an inline 0.6).
+const DOMINANT_SOURCE_SHARE = 0.6;
 
 // Bug fix (S-26 signals hotfix): production's opportunities table is 100%
 // still hard-to-fill-026-v1 -- S-23's rescore/backfill (which stamps
@@ -69,7 +75,7 @@ const SIGNALS: SignalDef[] = [
   {
     name: "Very stale (≥365d)",
     field: "days_open ≥ 365",
-    why: "Stale records need review before teams spend effort on them.",
+    why: "Stale records need review before teams spend effort on them. These are also counted in “Open 54 days or more”.",
     countsTowardHero: true,
     color: "#e6a53b",
     test: (_o, d) => d !== undefined && d >= 365,
@@ -88,7 +94,7 @@ const FAMILY_LABELS: Record<string, string> = {
   "engineering-swe": "Software engineering", "ml-ai": "AI & machine learning",
   "data-analytics": "Data & analytics", security: "Security", "cloud-infra": "Cloud & infrastructure",
   "support-cs": "Support & customer success", "sales-bizdev": "Sales & business development",
-  "retail-ops": "Retail & operations", "general-other": "Other or unclassified roles",
+  "retail-ops": "Retail & operations", "general-other": "Other roles",
 };
 
 const NEXT_STEPS: Record<string, string> = {
@@ -154,21 +160,20 @@ export function SignalsScreen({ onNavigate }: { onNavigate?: (view: string) => v
   const n = opportunities.length;
   const daysOpenByOpp = new Map(opportunities.map((o) => [o.id, extractDaysOpen(o)]));
 
-  // Bug 1/2 fix: real per-family Greenhouse median, computed the same way
-  // familyScarcity.ts does on the backend (Greenhouse-only, general-other
-  // excluded, real daysOpen field) -- from the real data this API already
-  // returns, not a stored (currently-unpopulated) column. Extracted into
-  // frontend/src/lib/basisDerivation.ts (06_decisions/049) so Overview can
-  // reuse the identical derivation.
-  const measuredEligibleFamilies = computeMeasuredEligibleFamilies(opportunities);
+  // Basis counts show the value STORED on each posting (06_decisions/051,
+  // PROPOSED) -- the same value the Opportunities cards show -- not a
+  // browser-side re-derivation.
+  const storedBasisSummary = summarizeStoredBasis(opportunities);
 
-  const effectiveBasis = (o: Opportunity) => sharedEffectiveBasis(o, measuredEligibleFamilies);
+  // Repost detection compares polls; until that comparison has run for any
+  // row, a 0 below would mean "unknown", not "none".
+  const repostsKnown = opportunities.some((o) => o.diffComputedAt != null);
 
   const heroSignalCount = (sig: SignalDef) =>
     opportunities.filter((o) => sig.test(o, daysOpenByOpp.get(o.id))).length;
-  const measuredCount = opportunities.filter((o) => effectiveBasis(o) === "measured").length;
-  const curatedCount = opportunities.filter((o) => effectiveBasis(o) === "curated").length;
-  const noBasisCount = n - measuredCount - curatedCount;
+  const measuredCount = storedBasisSummary.measured;
+  const curatedCount = storedBasisSummary.curated;
+  const noBasisCount = storedBasisSummary.none;
   const signalCounts = SIGNALS.map((sig) => ({ ...sig, count: heroSignalCount(sig) }));
   const totalInstances = signalCounts.reduce((sum, s) => sum + s.count, 0);
 
@@ -187,7 +192,12 @@ export function SignalsScreen({ onNavigate }: { onNavigate?: (view: string) => v
   // itself is the same one hardToFillConfig.ts declares.
   const sourceHealth = computeSourceHealth(opportunities);
 
-  const distinctCompanies = new Set(opportunities.map((o) => o.company)).size;
+  const companyNames = [...new Set(opportunities.map((o) => o.company))];
+  const distinctCompanies = companyNames.length;
+  const companyList =
+    companyNames.length <= 4
+      ? companyNames.join(", ")
+      : `${companyNames.slice(0, 4).join(", ")} and ${companyNames.length - 4} more`;
 
   const heroSignalDefs = SIGNALS;
   const oppsWithAnyHeroSignal = opportunities.filter((o) =>
@@ -208,11 +218,11 @@ export function SignalsScreen({ onNavigate }: { onNavigate?: (view: string) => v
     for (const o of famRows) sourceCounts.set(o.source, (sourceCounts.get(o.source) ?? 0) + 1);
     const topSource = [...sourceCounts.entries()].sort((a, b) => b[1] - a[1])[0];
     familyWhy =
-      topSource && topSource[1] / famRows.length >= 0.6
+      topSource && topSource[1] / famRows.length >= DOMINANT_SOURCE_SHARE
         ? `${FAMILY_LABELS[famName] ?? famName} appears most often because ${topSource[0]}'s feed contains many roles of this type.`
         : `${FAMILY_LABELS[famName] ?? famName} is the most common type in the loaded set (${Math.round((famCount / n) * 100)}%).`;
     if (families.has("general-other")) {
-          familyWhy += " Other or unclassified includes job titles that do not fit the named role types.";
+          familyWhy += " Other roles includes job titles that do not fit the named role types.";
     }
   }
   return (
@@ -225,12 +235,12 @@ export function SignalsScreen({ onNavigate }: { onNavigate?: (view: string) => v
           <span className="signals-overview-label">Roles with at least one hiring clue</span>
           <strong>{oppsWithAnyHeroSignal.toLocaleString()} <small>of {n.toLocaleString()} loaded postings</small></strong>
           <div className="signals-overview-track"><i style={{ width: `${coveragePct}%` }} /></div>
-          <p>These roles show at least one pattern below. This is a review queue, not a prediction that a role will be filled.</p>
+          <p>These roles show at least one pattern below. This is a review queue, not a prediction that a role will be filled.{coveragePct >= 95 ? " Almost every loaded posting has at least one clue, so this figure does not tell postings apart." : ""}</p>
         </div>
         <div className="signals-overview-card signals-overview-card--accent">
-          <span className="signals-overview-label">Hiring clues found</span>
+          <span className="signals-overview-label">Clues found</span>
           <strong>{totalInstances.toLocaleString()} <small>across {n.toLocaleString()} postings</small></strong>
-          <p>Each clue is counted separately; a single posting may contribute several. No week-to-week trend is shown because there is not enough history yet.</p>
+          <p>A posting can have several clues, and each is counted separately, so this can be higher than the number of postings. No week-to-week trend is shown because there is not enough history yet.</p>
           <button type="button" className="btn" onClick={() => onNavigate?.("opportunities")}>Review opportunities →</button>
         </div>
       </div>
@@ -253,7 +263,11 @@ export function SignalsScreen({ onNavigate }: { onNavigate?: (view: string) => v
           <div className="signal-card" key={sig.name}>
             <span className="signal-card-swatch" style={{ background: sig.color }} />
             <div className="signal-card-name">{sig.name === "Long-open (≥54d)" ? "Open 54 days or more" : sig.name === "Very stale (≥365d)" ? "Open at least one year" : sig.name}</div>
-            <div className="signal-card-count">{sig.count.toLocaleString()} <small>of {n.toLocaleString()} postings · {Math.round((sig.count / n) * 100)}%</small></div>
+            {sig.name === "Reposted roles" && !repostsKnown ? (
+              <div className="signal-card-count"><small>Not enough history yet</small></div>
+            ) : (
+              <div className="signal-card-count">{sig.count.toLocaleString()} <small>of {n.toLocaleString()} postings · {Math.round((sig.count / n) * 100)}%</small></div>
+            )}
             <div className="signals-bar-track"><i style={{ width: `${Math.min(100, (sig.count / n) * 100)}%`, background: sig.color }} /></div>
             <div className="signal-card-why">{sig.why}</div>
             <div className="signal-card-next"><b>Useful next step</b>{NEXT_STEPS[sig.name]}</div>
@@ -263,7 +277,13 @@ export function SignalsScreen({ onNavigate }: { onNavigate?: (view: string) => v
 
       <div className="signals-basis-panel">
         <div className="signals-section-heading">
-          <div><h3>How much to trust the role-scarcity evidence</h3><p>These labels describe the evidence behind role scarcity; they are not additional hiring signals.</p></div>
+          <div>
+            <h3>
+              How much to trust the role-scarcity evidence{" "}
+              <span className="small" title={BASIS_AS_STORED_TOOLTIP} tabIndex={0} aria-label={BASIS_AS_STORED_TOOLTIP}>Basis as stored ⓘ</span>
+            </h3>
+            <p>These labels describe the evidence behind role scarcity; they are not additional hiring signals.</p>
+          </div>
         </div>
         <div className="signals-basis-grid">
           <div><b>Measured evidence</b><strong>{measuredCount.toLocaleString()}</strong><span>Postings with eligible live data to compare role-family posting duration.</span></div>
@@ -271,6 +291,13 @@ export function SignalsScreen({ onNavigate }: { onNavigate?: (view: string) => v
           <div><b>No role-difficulty evidence</b><strong>{noBasisCount.toLocaleString()}</strong><span>No evidence to estimate role scarcity yet. Other hiring clues may still be present.</span></div>
         </div>
       </div>
+
+      <ShowTheMath>
+        <p><b>Clues found</b> adds up four overlapping counts. “Open at least one year” postings are also counted in “Open 54 days or more”, so the total is not a count of postings.</p>
+        <p><b>Cut-offs</b>: “Open 54 days or more” and “Open at least one year” use the app's current settings in this screen's clue definitions (54 and 365 days).</p>
+        <p><b>Basis counts</b> are the role-scarcity basis stored on each posting at its last scoring run, the same value shown on every Opportunities card.</p>
+        <p><b>Role types</b> name a source in “Why this matters” only when that source supplies at least {Math.round(DOMINANT_SOURCE_SHARE * 100)}% of that type.</p>
+      </ShowTheMath>
 
       <div className="signals-columns">
         <div className="signals-panel">
@@ -322,7 +349,7 @@ export function SignalsScreen({ onNavigate }: { onNavigate?: (view: string) => v
       <div className="signals-banner">
         <h3>What this view includes</h3>
         <p>
-          This view covers {n.toLocaleString()} job postings across {distinctCompanies.toLocaleString()} client names in the current load. Signal counts may overlap because one posting can have several clues. The listed actions are prompts for human review, not automated decisions. Trends need at least four weeks of ingestion history.
+          This view covers {n.toLocaleString()} job postings across {distinctCompanies.toLocaleString()} {distinctCompanies === 1 ? "company" : "companies"} in postings ({companyList}) in the current load. Signal counts may overlap because one posting can have several clues. The listed actions are prompts for human review, not automated decisions. Trends need at least four weeks of ingestion history.
         </p>
       </div>
     </section>

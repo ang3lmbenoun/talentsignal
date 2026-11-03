@@ -4,6 +4,7 @@ import {
   type ClientOpportunity,
   clientWhyItMattersExpanded,
   computeClientAggregates,
+  verdictLabel,
 } from "./lib/clientAggregation";
 import { effectiveFamily, extractDaysOpen } from "./lib/basisDerivation";
 
@@ -141,7 +142,7 @@ export function ClientDetail({
         </span>
         <div>
           <h2>{company}</h2>
-          <span className={`source-badge source-badge--${verdictClass}`}>{aggregate.verdict}</span>
+          <span className={`source-badge source-badge--${verdictClass}`}>{verdictLabel(aggregate.verdict)}</span>
         </div>
       </div>
 
@@ -149,23 +150,27 @@ export function ClientDetail({
 
       <div className="client-detail-kpi-row">
         <div className="opportunity-kpi-tile">
-          <div className="opportunity-kpi-label">Total open reqs</div>
+          <div className="opportunity-kpi-label">Open requisitions</div>
           <div className="opportunity-kpi-value">{aggregate.openReqs}</div>
         </div>
         <div className="opportunity-kpi-tile">
-          <div className="opportunity-kpi-label">Hard to fill</div>
+          <div className="opportunity-kpi-label">Roles flagged hard to fill</div>
           <div className="opportunity-kpi-value opportunity-kpi-value--accent">{aggregate.hardToFillCount}</div>
         </div>
         <div className="opportunity-kpi-tile">
-          <div className="opportunity-kpi-label">Median days_open</div>
+          <div className="opportunity-kpi-label">Typical age (median days open)</div>
           <div className="opportunity-kpi-value">{aggregate.medianDaysOpen ?? "—"}</div>
         </div>
         <div className="opportunity-kpi-tile">
           <div className="opportunity-kpi-label">Reposted</div>
-          <div className="opportunity-kpi-value">{aggregate.repostedCount}</div>
+          {clientRows.some((o) => o.diffComputedAt != null) ? (
+            <div className="opportunity-kpi-value">{aggregate.repostedCount}</div>
+          ) : (
+            <div className="opportunity-kpi-why">Not enough history yet</div>
+          )}
         </div>
         <div className="opportunity-kpi-tile">
-          <div className="opportunity-kpi-label">No-salary</div>
+          <div className="opportunity-kpi-label">No salary range</div>
           <div className="opportunity-kpi-value">{aggregate.noSalaryCount}</div>
         </div>
       </div>
