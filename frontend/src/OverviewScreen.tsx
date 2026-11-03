@@ -4,10 +4,11 @@ import { getStoredToken, getStoredRole, getStoredEmail } from "./auth";
 import { useOpportunitiesSummary } from "./hooks/useOpportunitiesSummary";
 import {
   type BasisOpportunity,
-  summarizeBasis,
   computeSourceHealth,
   computeSignalInstanceCounts,
 } from "./lib/basisDerivation";
+import { summarizeStoredBasis, BASIS_AS_STORED_TOOLTIP } from "./lib/storedBasis";
+import { ShowTheMath } from "./components/ShowTheMath";
 
 interface Opportunity extends BasisOpportunity {
   company: string;
@@ -22,7 +23,7 @@ interface Opportunity extends BasisOpportunity {
 // candidate tile from rendering, and vice versa.
 type CountState =
   | { status: "loading" }
-  | { status: "ok"; count: number }
+  | { status: "ok"; count: number; demoCount?: number }
   | { status: "unauthenticated" }
   | { status: "error" };
 
@@ -46,7 +47,15 @@ function useListCount(path: string, listKey: string, enabled: boolean): CountSta
         return res.json();
       })
       .then((body: Record<string, unknown[]>) => {
-        if (!cancelled) setState({ status: "ok", count: (body[listKey] ?? []).length });
+        if (cancelled) return;
+        const items = (body[listKey] ?? []) as { name?: unknown }[];
+        // Candidates loaded from the fixture file carry a "Fixture Candidate"
+        // name prefix; counting them lets the tile say how many are demo data
+        // instead of implying every profile is real.
+        const demoCount = items.filter(
+          (item) => typeof item?.name === "string" && /^Fixture Candidate/i.test(item.name),
+        ).length;
+        setState({ status: "ok", count: items.length, demoCount });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -124,10 +133,11 @@ function loadingValue(status: "loading" | "unauthenticated" | "error"): string {
   return status === "loading" ? "…" : "—";
 }
 
-// S-25: 4 equal-weight KPI tiles, each with a real number, a placeholder
-// sparkline (explicitly not data-bound -- no time-series history exists
-// yet), and a one-sentence plain-English "why" this number matters, per
-// the approved mockup (talentsignal-redesign.html, Screen 1 -- Overview).
+// S-25: KPI tiles, each with a real number and a one-sentence plain-English
+// "why" this number matters, per the approved mockup. The placeholder
+// sparkline and per-tile "trend pending" line were replaced by a single
+// page-level note (number-cleanup pass).
+
 function KpiTile({
   icon: Icon,
   value,
@@ -165,50 +175,19 @@ function KpiTile({
       <span className="kpi-tile-value mono">{value}</span>
       {error && <span className="stat-tile-error">Could not load</span>}
       {children}
-      {!children && (
-        <svg className="kpi-tile-sparkline" viewBox="0 0 100 24" role="img" aria-label="Trend placeholder, no history yet">
-          <path d="M0 18 L15 12 L30 15 L45 8 L60 12 L75 6 L100 10" fill="none" stroke="var(--border)" strokeWidth="2" />
-        </svg>
-      )}
       {basisPill && <span className="kpi-tile-basis-pill">{basisPill}</span>}
       {caption && <p className="kpi-tile-caption">{caption}</p>}
-      <p className="kpi-tile-trend">Trend pending · needs 4+ weeks of ingestion</p>
       <p className="kpi-tile-why">Why it matters: {why}</p>
     </div>
   );
 }
 
-// S-29: real bucket counts from /api/fits/summary, rendered as a tiny
-// 4-bar histogram (insufficient_data excluded -- it isn't a score band) --
-// explicitly real, not the placeholder sparkline every other tile shows,
-// since this data already exists per-request.
-function FitBucketMiniHistogram({
-  distribution,
-  highlight,
-}: {
-  distribution: FitDistribution;
-  highlight: keyof FitDistribution;
-}) {
-  const bars: { key: keyof FitDistribution; count: number }[] = [
-    { key: "ge85", count: distribution.ge85 },
-    { key: "b70_84", count: distribution.b70_84 },
-    { key: "b60_69", count: distribution.b60_69 },
-    { key: "lt60", count: distribution.lt60 },
-  ];
-  const max = Math.max(...bars.map((b) => b.count), 1);
-  return (
-    <div className="kpi-tile-histogram" role="img" aria-label="Fit score bucket distribution, this bucket highlighted">
-      {bars.map((b) => (
-        <span
-          key={b.key}
-          className={`kpi-tile-histogram-bar${b.key === highlight ? " kpi-tile-histogram-bar--highlight" : ""}`}
-          style={{ height: `${(b.count / max) * 100}%` }}
-          title={`${b.key}: ${b.count}`}
-        />
-      ))}
-    </div>
-  );
-}
+// Demand-evidence band cut-offs (06_decisions/050). Named here so the "Show
+// the math" text below reads the same numbers the counts use; the values are
+// unchanged.
+const TIER_STRONG_MIN = 0.7;
+const TIER_GOOD_MIN = 0.5;
+const TIER_REVIEW_MIN = 0.25;
 
 const BASIS_TIERS = [
   { key: "measured" as const, label: "Measured", colorVar: "--success" },
@@ -216,14 +195,11 @@ const BASIS_TIERS = [
   { key: "none" as const, label: "No basis", colorVar: "--border" },
 ];
 
-// 06_decisions/049: basis is now derived client-side (same derivation
-// SignalsScreen.tsx uses, from frontend/src/lib/basisDerivation.ts) instead
-// of trusting /api/opportunities/summary's measuredBasis/curatedBasis/
-// noBasis fields, which always read 0/0/total because production's
-// opportunities table was never rescored under S-23. Every number is
-// basisSummary.total's own partition, so the three segments always add up
-// to the loaded opportunity count.
-function BasisBar({ summary }: { summary: ReturnType<typeof summarizeBasis> }) {
+// 06_decisions/051 (PROPOSED): these counts are the basis AS STORED on each
+// loaded posting -- the same value the Opportunities cards show -- not
+// re-derived in the browser (that disagreed: 180 vs 155 "measured" on the
+// demo data). The three segments partition the loaded posting count.
+function BasisBar({ summary }: { summary: ReturnType<typeof summarizeStoredBasis> }) {
   if (summary.total === 0) return null;
   const descriptions: Record<(typeof BASIS_TIERS)[number]["key"], string> = {
     measured: "Eligible live posting history can be compared with similar roles.",
@@ -285,15 +261,23 @@ interface Tier {
 // there isn't enough source diversity loaded yet to say anything real, it
 // renders nothing rather than a fabricated story.
 function StoryOfTheWeek({
+  opportunities,
   sourceHealth,
-  signalCounts,
   tiers,
 }: {
+  opportunities: Opportunity[];
   sourceHealth: ReturnType<typeof computeSourceHealth>;
-  signalCounts: ReturnType<typeof computeSignalInstanceCounts>;
   tiers: Tier[];
 }) {
   const healthy = sourceHealth.find((s) => s.verdict === "healthy");
+  // Every figure in the first sentence is computed from THIS source's own
+  // postings. (It used to count the whole loaded set but name one source, so
+  // Lever's rows were reported as Greenhouse's.)
+  const healthyRows = healthy ? opportunities.filter((o) => o.source === healthy.source) : [];
+  const healthySignals = computeSignalInstanceCounts(healthyRows);
+  // Reposts are detected by comparing polls; if that comparison has never run
+  // for these rows, say so instead of printing a misleading 0.
+  const repostsKnown = healthyRows.some((o) => o.diffComputedAt !== null);
   const flagged = sourceHealth.find((s) => s.verdict === "flagged — excluded");
   const tiersTotal = tiers.reduce((sum, t) => sum + t.count, 0);
   const dominant = tiersTotal > 0 ? [...tiers].sort((a, b) => b.count - a.count)[0] : null;
@@ -302,12 +286,16 @@ function StoryOfTheWeek({
 
   return (
     <div className="overview-card overview-story">
-      <div className="overview-story-eyebrow">This week · story</div>
+      <div className="overview-story-eyebrow">In the loaded data</div>
       <p className="overview-story-body">
         {healthy && (
           <>
-            {healthy.source} shows {signalCounts.longOpen} long-open and {signalCounts.reposted} reposted
-            opportunit{signalCounts.reposted === 1 ? "y" : "ies"} in the currently loaded set.{" "}
+            {healthy.source} has {healthySignals.longOpen} long-open posting{healthySignals.longOpen === 1 ? "" : "s"} among
+            its {healthyRows.length.toLocaleString()} loaded postings;{" "}
+            {repostsKnown
+              ? `${healthySignals.reposted} ${healthySignals.reposted === 1 ? "is" : "are"} reposted`
+              : "reposts: not enough history yet"}
+            .{" "}
           </>
         )}
         {flagged && (
@@ -360,7 +348,7 @@ function TopOpportunities({ top3 }: { top3: Opportunity[] }) {
             <div className="top-opp-card" key={o.id}>
               <div className="top-opp-card-head">
                 <span className="top-opp-card-title">{o.title}</span>
-                <span className="top-opp-score-badge mono" title="Role-difficulty indicator for review, not a probability of hiring">{Math.round(o.hardToFillScore! * 100)}% to review</span>
+                <span className="top-opp-score-badge mono" title="Role-difficulty indicator for review, not a probability of hiring">Difficulty signal {Math.round(o.hardToFillScore! * 100)} of 100</span>
               </div>
               <div className="top-opp-card-company">{o.company}</div>
               {why && <p className="top-opp-card-why">{why}</p>}
@@ -441,7 +429,7 @@ const FIT_BUCKET_MEANINGS: { key: keyof FitDistribution; label: string; colorVar
   { key: "ge85", label: "≥85%", colorVar: "--success", meaning: "Strong overlap — review before outreach" },
   { key: "b70_84", label: "70–84%", colorVar: "--accent", meaning: "Needs review" },
   { key: "b60_69", label: "60–69%", colorVar: "--warning", meaning: "Review criteria or search for candidates" },
-  { key: "lt60", label: "<60%", colorVar: "--danger", meaning: "No overlap yet" },
+  { key: "lt60", label: "<60%", colorVar: "--danger", meaning: "Weak overlap" },
   { key: "insufficient_data", label: "insufficient data", colorVar: "--border", meaning: "Candidate data insufficient" },
 ];
 
@@ -597,25 +585,25 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
     () => [
       {
         label: "Strong",
-        count: opportunities.filter((o) => o.confidenceScore >= 0.7).length,
+        count: opportunities.filter((o) => o.confidenceScore >= TIER_STRONG_MIN).length,
         colorVar: "--success",
         callout: "act now",
       },
       {
         label: "Good",
-        count: opportunities.filter((o) => o.confidenceScore >= 0.5 && o.confidenceScore < 0.7).length,
+        count: opportunities.filter((o) => o.confidenceScore >= TIER_GOOD_MIN && o.confidenceScore < TIER_STRONG_MIN).length,
         colorVar: "--accent",
         callout: "strong signal",
       },
       {
         label: "Review",
-        count: opportunities.filter((o) => o.confidenceScore >= 0.25 && o.confidenceScore < 0.5).length,
+        count: opportunities.filter((o) => o.confidenceScore >= TIER_REVIEW_MIN && o.confidenceScore < TIER_GOOD_MIN).length,
         colorVar: "--warning",
         callout: "verify before acting",
       },
       {
         label: "Poor",
-        count: opportunities.filter((o) => o.confidenceScore < 0.25).length,
+        count: opportunities.filter((o) => o.confidenceScore < TIER_REVIEW_MIN).length,
         colorVar: "--danger",
         callout: "likely noise",
       },
@@ -624,7 +612,7 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
   );
   const tiersTotal = tiers.reduce((sum, t) => sum + t.count, 0);
 
-  const basisSummary = useMemo(() => summarizeBasis(opportunities), [opportunities]);
+  const basisSummary = useMemo(() => summarizeStoredBasis(opportunities), [opportunities]);
   const signalCounts = useMemo(() => computeSignalInstanceCounts(opportunities), [opportunities]);
   const sourceHealth = useMemo(() => computeSourceHealth(opportunities), [opportunities]);
   const top3 = useMemo(
@@ -662,125 +650,125 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
 
       <StartHereGuide canSeeOpportunities={canSeeOpportunities} onNavigate={onNavigate} />
 
-      {/* S-25: 4 equal-weight KPI tiles per the approved mockup -- replaces
-          the prior single dominant hero tile plus the Clients/Candidates
-          entries from the old secondary row (Requisitions Ingested stays
-          below as its own small tile; it isn't one of the mockup's 4). */}
+      {/* S-25: KPI tiles per the approved mockup. Number-cleanup pass (07_analyses/
+          number-audit-2026-11-03.md): per-tile "trend pending" lines and the
+          placeholder sparklines were replaced by ONE note below; definitions
+          moved into "Show the math". Labels say what each count is. */}
       {canSeeOpportunities && (
-        <div className="kpi-grid">
-          <KpiTile
-            icon={Flame}
-            value={
-              hardToFillCount.status === "ok" && opportunitiesCount.status === "ok"
-                ? `${hardToFillCount.count}/${opportunitiesCount.count}`
-                : tileValue(hardToFillCount)
-            }
-            label="Hard-to-fill"
-            why="where your agency's revenue is hiding"
-            caption={
-              hardToFillCount.status === "ok" && opportunitiesCount.status === "ok"
-                ? `n=${hardToFillCount.count} of ${opportunitiesCount.count} opportunities`
-                : undefined
-            }
-            error={hardToFillCount.status === "error" || opportunitiesCount.status === "error"}
-          />
-          <KpiTile
-            icon={Radar}
-            value={opportunitiesState.status === "ok" ? String(signalCounts.total) : loadingValue(opportunitiesState.status)}
-            label="Total signals"
-            why="reposts, long-open, stale, no-salary, scarcity"
-            caption={opportunitiesState.status === "ok" ? `n=${signalCounts.total} signal instances` : undefined}
-            error={opportunitiesState.status === "error"}
-          />
-          <KpiTile
-            icon={Building2}
-            value={tileValue(clients)}
-            label="Active clients"
-            why="client records for your team to review"
-            caption={clients.status === "ok" ? `n=${clients.count} clients` : undefined}
-            error={clients.status === "error"}
-          />
-          <KpiTile
-            icon={Users}
-            value={tileValue(candidates)}
-            label="Candidates"
-            why="profiles in your candidate pool"
-            caption={candidates.status === "ok" ? `n=${candidates.count} candidates` : undefined}
-            error={candidates.status === "error"}
-          />
-
-          {/* S-29: 3 new fit-scoring KPI tiles (S-28's /api/fits/summary),
-              bringing the grid to 7 -- kept alongside the original 4 rather
-              than replacing any of them, since each already carries real,
-              independently useful data and 7 tiles still wraps cleanly on
-              the existing responsive grid. */}
-          {fitsSummaryState.status === "ok" && (
+        <>
+          <div className="kpi-grid">
             <KpiTile
-              icon={Target}
-              value={
-                fitsSummaryState.summary.avgFitScore === null
-                  ? "—"
-                  : `${Math.round(fitsSummaryState.summary.avgFitScore * 100)}%`
+              icon={Flame}
+              value={hardToFillCount.status === "ok" ? String(hardToFillCount.count) : tileValue(hardToFillCount)}
+              label="Hard-to-fill"
+              why="where your agency's revenue is hiding"
+              error={hardToFillCount.status === "error" || opportunitiesCount.status === "error"}
+            />
+            <KpiTile
+              icon={Radar}
+              value={opportunitiesState.status === "ok" ? String(signalCounts.total) : loadingValue(opportunitiesState.status)}
+              label="Clues found"
+              why="reposted, long-open, very long-open and no-salary clues; one posting can have several, so this can be higher than the number of postings"
+              error={opportunitiesState.status === "error"}
+            />
+            <KpiTile
+              icon={Building2}
+              value={tileValue(clients)}
+              label="Client records (CRM)"
+              why="client records your team has added; separate from the companies named in job postings"
+              error={clients.status === "error"}
+            />
+            <KpiTile
+              icon={Users}
+              value={tileValue(candidates)}
+              label="Candidates"
+              why="profiles in your candidate pool"
+              caption={
+                candidates.status === "ok" && candidates.demoCount
+                  ? `${candidates.demoCount} demo (fixture) profile${candidates.demoCount === 1 ? "" : "s"}`
+                  : undefined
               }
-              label="Avg candidate fit"
-              why={`across ${fitsSummaryState.summary.measuredCount} reqs · ${fitsSummaryState.summary.totalCandidates} candidates`}
-              basisPill={`n=${fitsSummaryState.summary.measuredCount} of ${fitsSummaryState.summary.totalOpportunities} reqs have measured fit data`}
+              error={candidates.status === "error"}
             />
-          )}
-          {fitsSummaryState.status !== "ok" && (
-            <KpiTile
-              icon={Target}
-              value={loadingValue(fitsSummaryState.status)}
-              label="Avg candidate fit"
-              why="across reqs with measured fit data"
-              error={fitsSummaryState.status === "error"}
-            />
-          )}
 
-          {fitsSummaryState.status === "ok" && (
-            <KpiTile
-              icon={Target}
-              value={String(fitsSummaryState.summary.distribution.ge85)}
-              label="Reqs with strong candidates (≥85%)"
-              why="potentially strong fit; review evidence first"
-              basisPill={`n=${fitsSummaryState.summary.measuredCount} of ${fitsSummaryState.summary.totalOpportunities} reqs with measured fit`}
-            >
-              <FitBucketMiniHistogram distribution={fitsSummaryState.summary.distribution} highlight="ge85" />
-            </KpiTile>
-          )}
-          {fitsSummaryState.status !== "ok" && (
-            <KpiTile
-              icon={Target}
-              value={loadingValue(fitsSummaryState.status)}
-              label="Reqs with strong candidates (≥85%)"
-              why="potentially strong fit; review evidence first"
-              error={fitsSummaryState.status === "error"}
-            />
-          )}
+            {/* S-29: fit-scoring KPI tiles (S-28's /api/fits/summary). */}
+            {fitsSummaryState.status === "ok" && (
+              <KpiTile
+                icon={Target}
+                value={
+                  fitsSummaryState.summary.avgFitScore === null
+                    ? "—"
+                    : `${Math.round(fitsSummaryState.summary.avgFitScore * 100)}%`
+                }
+                label="Average best-candidate match"
+                why={`across ${fitsSummaryState.summary.measuredCount} reqs · ${fitsSummaryState.summary.totalCandidates} candidates`}
+              />
+            )}
+            {fitsSummaryState.status !== "ok" && (
+              <KpiTile
+                icon={Target}
+                value={loadingValue(fitsSummaryState.status)}
+                label="Average best-candidate match"
+                why="across reqs with measured fit data"
+                error={fitsSummaryState.status === "error"}
+              />
+            )}
 
-          {fitsSummaryState.status === "ok" && (
-            <KpiTile
-              icon={AlertTriangle}
-              value={String(
-                fitsSummaryState.summary.distribution.b60_69 + fitsSummaryState.summary.distribution.lt60,
-              )}
-              label="Reqs needing attention (<70%)"
-              why="review fit gaps and the available evidence"
-              basisPill={`n=${fitsSummaryState.summary.measuredCount} of ${fitsSummaryState.summary.totalOpportunities} reqs with measured fit`}
-            >
-              <FitBucketMiniHistogram distribution={fitsSummaryState.summary.distribution} highlight="lt60" />
-            </KpiTile>
-          )}
-          {fitsSummaryState.status !== "ok" && (
-            <KpiTile
-              icon={AlertTriangle}
-              value={loadingValue(fitsSummaryState.status)}
-              label="Reqs needing attention (<70%)"
-              why="review fit gaps and the available evidence"
-              error={fitsSummaryState.status === "error"}
-            />
-          )}
-        </div>
+            {fitsSummaryState.status === "ok" && (
+              <KpiTile
+                icon={Target}
+                value={String(fitsSummaryState.summary.distribution.ge85)}
+                label="Reqs with strong candidates (≥85%)"
+                why="potentially strong fit; review evidence first"
+              />
+            )}
+            {fitsSummaryState.status !== "ok" && (
+              <KpiTile
+                icon={Target}
+                value={loadingValue(fitsSummaryState.status)}
+                label="Reqs with strong candidates (≥85%)"
+                why="potentially strong fit; review evidence first"
+                error={fitsSummaryState.status === "error"}
+              />
+            )}
+
+            {fitsSummaryState.status === "ok" && (
+              <KpiTile
+                icon={AlertTriangle}
+                value={String(
+                  fitsSummaryState.summary.distribution.b60_69 + fitsSummaryState.summary.distribution.lt60,
+                )}
+                label="Reqs with best match below 70%"
+                why="review fit gaps and the available evidence"
+              />
+            )}
+            {fitsSummaryState.status !== "ok" && (
+              <KpiTile
+                icon={AlertTriangle}
+                value={loadingValue(fitsSummaryState.status)}
+                label="Reqs with best match below 70%"
+                why="review fit gaps and the available evidence"
+                error={fitsSummaryState.status === "error"}
+              />
+            )}
+          </div>
+
+          <p className="trend-note">Trend lines are not shown yet: they need 4+ weeks of ingestion history.</p>
+
+          <ShowTheMath>
+            <p><b>Counts behind the tiles</b>:{" "}
+              {hardToFillCount.status === "ok" && opportunitiesCount.status === "ok" ? `${hardToFillCount.count} of ${opportunitiesCount.count} postings are flagged hard-to-fill; ` : ""}
+              {opportunitiesState.status === "ok" ? `${signalCounts.total} clues across ${opportunities.length} postings; ` : ""}
+              {clients.status === "ok" ? `${clients.count} client records (CRM); ` : ""}
+              {candidates.status === "ok" ? `${candidates.count} candidates` : ""}
+              {fitsSummaryState.status === "ok" ? `. The three candidate-match tiles are based on ${fitsSummaryState.summary.measuredCount} of ${fitsSummaryState.summary.totalOpportunities} reqs that have measured fit data.` : "."}
+            </p>
+            <p><b>Hard-to-fill</b>: postings whose difficulty signal reaches the app's hard-to-fill cut-off (set in hardToFillConfig.ts). Each posting's "How this was scored" lists the factors.</p>
+            <p><b>Clues found</b>: the sum of four overlapping clue counts (reposted, long-open, very long-open, no salary range). A posting can have several, and very long-open postings are also counted as long-open.</p>
+            <p><b>Client records (CRM)</b>: rows in the CRM clients table. The companies named in job postings are counted separately on the Clients screen.</p>
+            <p><b>Average best-candidate match</b>: for each posting with measured fit, take its single best candidate's skill-overlap score, then average those scores (decision 056, weights PROPOSED).</p>
+          </ShowTheMath>
+        </>
       )}
 
       {canSeeOpportunities && fitsSummaryState.status === "ok" && (
@@ -794,21 +782,28 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
       )}
 
       {canSeeOpportunities && (
-        <div className="stat-grid stat-grid-secondary">
-          <div className="stat-tile stat-tile-secondary" role="group" aria-label="Requisitions Ingested">
-            <div className="stat-tile-icon" style={{ background: "var(--mute)" }}>
-              <Briefcase size={15} aria-hidden="true" />
+        <>
+          <div className="stat-grid stat-grid-secondary">
+            <div className="stat-tile stat-tile-secondary" role="group" aria-label="Postings ingested">
+              <div className="stat-tile-icon" style={{ background: "var(--mute)" }}>
+                <Briefcase size={15} aria-hidden="true" />
+              </div>
+              <span className="stat-tile-value">{tileValue(opportunitiesCount)}</span>
+              <span className="stat-tile-label">Postings ingested</span>
+              {opportunitiesCount.status === "ok" && <span className="stat-tile-real-badge">distinct</span>}
+              {opportunitiesCount.status === "error" && <span className="stat-tile-error">Could not load</span>}
             </div>
-            <span className="stat-tile-value">{tileValue(requisitionsIngestedCount)}</span>
-            <span className="stat-tile-label">Requisitions Ingested</span>
-            {requisitionsIngestedCount.status === "ok" && <span className="stat-tile-real-badge">raw</span>}
-            {requisitionsIngestedCount.status === "error" && <span className="stat-tile-error">Could not load</span>}
           </div>
-        </div>
+          {requisitionsIngestedCount.status === "ok" && (
+            <ShowTheMath>
+              <p><b>Snapshots stored: {requisitionsIngestedCount.count.toLocaleString()}</b>. Every poll of a source stores one row per posting it returned, so this is larger than the number of distinct postings above.</p>
+            </ShowTheMath>
+          )}
+        </>
       )}
 
       {canSeeOpportunities && (
-        <StoryOfTheWeek sourceHealth={sourceHealth} signalCounts={signalCounts} tiers={tiers} />
+        <StoryOfTheWeek opportunities={opportunities} sourceHealth={sourceHealth} tiers={tiers} />
       )}
 
       {canSeeOpportunities && (
@@ -825,8 +820,8 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
                   Last run: {latestDiff ? formatRelativeTime(latestDiff) : "never"}
                 </p>
                 <p>
-                  <strong>{opportunities.length}</strong> opportunit{opportunities.length === 1 ? "y" : "ies"}{" "}
-                  ingested from {sources.length > 0 ? sources.join(", ") : "no sources yet"}
+                  <strong>{opportunities.length}</strong> posting{opportunities.length === 1 ? "" : "s"}{" "}
+                  loaded from {sources.length > 0 ? sources.join(", ") : "no sources yet"}
                 </p>
               </>
             )}
@@ -850,10 +845,20 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
                 })}
               </div>
             )}
+            {opportunitiesState.status === "ok" && (
+              <ShowTheMath>
+                <p>Bands group each posting's demand-evidence score: Strong is {Math.round(TIER_STRONG_MIN * 100)}% or more, Good is {Math.round(TIER_GOOD_MIN * 100)}% to under {Math.round(TIER_STRONG_MIN * 100)}%, Review is {Math.round(TIER_REVIEW_MIN * 100)}% to under {Math.round(TIER_GOOD_MIN * 100)}%, Poor is under {Math.round(TIER_REVIEW_MIN * 100)}% (decision 050).</p>
+              </ShowTheMath>
+            )}
           </div>
 
           <div className="overview-card overview-card-basis">
-            <h3>Evidence behind role-difficulty estimates</h3>
+            <h3>
+              Evidence behind role-difficulty estimates{" "}
+              <span className="small" title={BASIS_AS_STORED_TOOLTIP} tabIndex={0} aria-label={BASIS_AS_STORED_TOOLTIP}>
+                Basis as stored ⓘ
+              </span>
+            </h3>
             <p className="overview-card-subhead">How much support the app has for saying a role may be hard to fill, across {basisSummary.total.toLocaleString()} loaded postings.</p>
             {opportunitiesState.status === "loading" && <p>Loading...</p>}
             {opportunitiesState.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}

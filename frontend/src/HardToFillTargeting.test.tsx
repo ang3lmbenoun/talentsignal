@@ -59,7 +59,7 @@ describe("HardToFillTargeting", () => {
     await waitFor(() => expect(screen.getByText("Senior Data Analyst")).toBeInTheDocument());
     const card = screen.getByText("Senior Data Analyst").closest("details");
     expect(card).toHaveTextContent("Insight Analytics");
-    expect(card).toHaveTextContent("100% role-difficulty signal");
+    expect(card).toHaveTextContent("Difficulty signal 100 of 100");
     expect(card).toHaveTextContent("In demand role type");
     expect(card).toHaveTextContent("Needs:");
     // Students appear with their fit and the real matched skills — never bare.

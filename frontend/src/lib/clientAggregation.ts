@@ -19,12 +19,14 @@ import {
   extractDaysOpen,
   MEASURED_ELIGIBLE_SOURCES,
   median,
-  summarizeBasis,
 } from "./basisDerivation";
+import { summarizeStoredBasis } from "./storedBasis";
 
 export interface ClientOpportunity extends BasisOpportunity {
   company: string;
   hardToFill?: boolean;
+  // null/absent until the repost-detection diff has run for this row.
+  diffComputedAt?: string | null;
 }
 
 export type SourceVerdict = "healthy" | "fixture" | "flagged — excluded";
@@ -69,7 +71,9 @@ export function computeClientAggregates(opportunities: ClientOpportunity[]): Cli
   for (const [company, rows] of byCompany.entries()) {
     const source = rows[0].source;
     const daysOpenValues = rows.map((o) => extractDaysOpen(o)).filter((d): d is number => d !== undefined);
-    const basis = summarizeBasis(rows);
+    // Basis as stored on the rows (06_decisions/051), same value the
+    // Opportunities cards show -- not re-derived here.
+    const basis = summarizeStoredBasis(rows);
     const hasMeasuredRow = rows.some((o) => effectiveBasis(o, measuredEligibleFamilies) === "measured");
     aggregates.push({
       company,
@@ -90,20 +94,28 @@ export function computeClientAggregates(opportunities: ClientOpportunity[]): Cli
 // no per-company invented flourish. The qualifier clause only varies by
 // real, computed facts (verdict, and rank among healthy sources by open
 // req count).
+// The posting count and median age are NOT repeated in this sentence: every
+// place that shows it already shows them as their own labelled figures (the
+// "Open requisitions" / "Typical age" pills and the detail KPIs).
 export function clientWhyItMatters(client: ClientAggregate, allClients: ClientAggregate[]): string {
   const sourceName = client.source === "greenhouse" ? "Greenhouse" : client.source === "lever" ? "Lever" : client.source;
-  const medianPart = client.medianDaysOpen === undefined
-    ? "The source does not provide a usable posting age."
-    : `The median listed posting age is ${client.medianDaysOpen.toLocaleString()} days.`;
-  const base = `${client.company} has n=${client.openReqs} job postings. ${medianPart}`;
+  const agePart = client.medianDaysOpen === undefined ? " The source does not provide a usable posting age." : "";
 
   if (client.verdict === "flagged — excluded") {
-    return `${base} This source's dates look unusually old and are excluded from measured role-scarcity comparisons. Verify that each posting is still active; the age-based demand score may also be affected.`;
+    return `${client.company}: this source's dates look unusually old and are excluded from measured role-scarcity comparisons.${agePart} Verify that each posting is still active; the age-based demand score may also be affected.`;
   }
   if (client.verdict === "fixture") {
-    return `${base} These are demo records for illustrating the workflow, not live hiring demand.`;
+    return `${client.company}: these are demo records for illustrating the workflow, not live hiring demand.${agePart}`;
   }
-  return `${base} ${sourceName} is a live source eligible for measured role-scarcity comparisons. Reposted roles: n=${client.repostedCount}; currently flagged hard to fill: n=${client.hardToFillCount}.`;
+  return `${client.company}: ${sourceName} is a live source eligible for measured role-scarcity comparisons.${agePart} Reposted roles: ${client.repostedCount}; currently flagged hard to fill: ${client.hardToFillCount}.`;
+}
+
+// Display wording for the source status badge, shared by the Clients and
+// Opportunities screens so both say the same thing ("live", as on the
+// Opportunities source pills) instead of "healthy". The underlying verdict
+// value is unchanged.
+export function verdictLabel(verdict: SourceVerdict): string {
+  return verdict === "healthy" ? "live" : verdict;
 }
 
 export function clientWhyItMattersExpanded(client: ClientAggregate, allClients: ClientAggregate[]): string {

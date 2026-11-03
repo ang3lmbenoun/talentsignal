@@ -5,6 +5,7 @@ import {
   type ClientOpportunity,
   clientWhyItMatters,
   computeClientAggregates,
+  verdictLabel,
 } from "./lib/clientAggregation";
 import { median } from "./lib/basisDerivation";
 import { ClientDetail } from "./ClientDetail";
@@ -102,13 +103,13 @@ function ClientCard({
         </span>
         <div>
           <h4>{client.company}</h4>
-          <span className={`source-badge source-badge--${verdictClass}`}>{client.verdict}</span>
+          <span className={`source-badge source-badge--${verdictClass}`}>{verdictLabel(client.verdict)}</span>
         </div>
       </div>
       <div className="client-card-pills">
-        <span className="opportunity-pill">Open reqs · {client.openReqs}</span>
-        <span className="opportunity-pill">Median · {client.medianDaysOpen ?? "—"}d</span>
-        <span className="opportunity-pill">Hard-to-fill · {client.hardToFillCount}</span>
+        <span className="opportunity-pill">Open requisitions · {client.openReqs}</span>
+        <span className="opportunity-pill">Typical age · {client.medianDaysOpen?.toLocaleString() ?? "not available"} days (median)</span>
+        <span className="opportunity-pill">Roles flagged hard to fill · {client.hardToFillCount}</span>
       </div>
       <p className="client-card-why">{clientWhyItMatters(client, allClients)}</p>
       {client.verdict === "flagged — excluded" && (
@@ -144,13 +145,11 @@ export function ClientsScreen() {
     );
   }, [allAggregates, showFixtures, sortBy]);
 
-  // Mini-KPI strip. "Active clients" is every client this screen can ever
-  // show, since a card only exists because at least one real opportunity
-  // named that company -- there is no separate "known companies with zero
-  // open reqs" list in this data model, so the two numbers are honestly
-  // identical today rather than a fabricated distinct metric.
+  // Mini-KPI strip. These are the companies named in loaded postings (not the
+  // CRM client records). A company card only exists because at least one
+  // posting names it, so a separate "with open requisitions" tile would
+  // always repeat this number and was removed.
   const totalClients = allAggregates.length;
-  const activeClients = allAggregates.filter((c) => c.openReqs > 0).length;
   const liveMedianValues = allAggregates
     .filter((c) => c.verdict === "healthy" && c.medianDaysOpen !== undefined)
     .map((c) => c.medianDaysOpen!);
@@ -169,34 +168,31 @@ export function ClientsScreen() {
   return (
     <section aria-label="clients">
       <h2>Clients</h2>
-      <p className="screen-description">Compare each client’s open requisitions and source quality. A flagged feed is shown for context and excluded from measured scarcity.</p>
+      <p className="screen-description">Compare each company’s open requisitions and source quality. These are the companies named in job postings, not your CRM client records. A flagged feed is shown for context and excluded from measured scarcity.</p>
 
-      {opportunitiesState.status === "loading" && <p>Loading clients...</p>}
+      {opportunitiesState.status === "loading" && <p>Loading companies...</p>}
       {opportunitiesState.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}
-      {opportunitiesState.status === "error" && <p>Could not load clients.</p>}
+      {opportunitiesState.status === "error" && <p>Could not load companies.</p>}
 
       {opportunitiesState.status === "ok" && (
         <>
           <div className="client-kpi-strip">
             <div className="opportunity-kpi-tile">
-              <div className="opportunity-kpi-label">Client companies</div>
+              <div className="opportunity-kpi-label">Companies in postings</div>
               <div className="opportunity-kpi-value">{totalClients}</div>
-            </div>
-            <div className="opportunity-kpi-tile">
-              <div className="opportunity-kpi-label">With open requisitions</div>
-              <div className="opportunity-kpi-value">{activeClients}</div>
+              <p className="opportunity-kpi-why">Distinct company names in the loaded postings.</p>
             </div>
             <div className="opportunity-kpi-tile">
               <div className="opportunity-kpi-label">Median days open · live sources</div>
               <div className="opportunity-kpi-value opportunity-kpi-value--accent">{liveMedian ?? "—"}</div>
-            <p className="opportunity-kpi-why">How long current live-source requisitions have been open; flagged feeds are left out.</p>
+            <p className="opportunity-kpi-why">The median of each live source’s median posting age (from {liveMedianValues.length} live source{liveMedianValues.length === 1 ? "" : "s"}); flagged feeds are left out.</p>
             </div>
           </div>
 
           <div className="filterbar">
             <select className="select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-              <option value={SORT_OPEN_REQS_DESC}>Sort · open reqs ↓</option>
-              <option value={SORT_MEDIAN_DESC}>Sort · median days_open ↓</option>
+              <option value={SORT_OPEN_REQS_DESC}>Sort · open requisitions ↓</option>
+              <option value={SORT_MEDIAN_DESC}>Sort · typical age ↓</option>
             </select>
             <label className="client-fixture-toggle">
               <input
@@ -208,7 +204,7 @@ export function ClientsScreen() {
             </label>
           </div>
 
-          {visibleAggregates.length === 0 && <p>No clients in the currently loaded data.</p>}
+          {visibleAggregates.length === 0 && <p>No companies in the currently loaded data.</p>}
 
           <div className="clientgrid">
             {visibleAggregates.map((client) => (
@@ -222,7 +218,7 @@ export function ClientsScreen() {
           </div>
 
           <p className="caption client-count-caption">
-            Showing {visibleAggregates.length} client{visibleAggregates.length === 1 ? "" : "s"} from{" "}
+            Showing {visibleAggregates.length} {visibleAggregates.length === 1 ? "company" : "companies"} in postings from{" "}
             {opportunities.length} currently loaded opportunities. Counts reflect this loaded set, not a
             separately tracked "closed requisition" status.
           </p>

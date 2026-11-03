@@ -106,13 +106,13 @@ function toForecastChartData(anomalies: AnomaliesResult): ForecastResult {
 }
 
 function DeltaArrow({ current, prior }: { current: number; prior: number | undefined }) {
-  if (prior === undefined) return <span className="small">no prior month to compare</span>;
+  if (prior === undefined) return <span className="small">no earlier month with data to compare</span>;
   const delta = current - prior;
-  if (delta === 0) return <span className="analytics-delta analytics-delta--flat">flat vs prior month</span>;
+  if (delta === 0) return <span className="analytics-delta analytics-delta--flat">flat vs previous month with data</span>;
   const up = delta > 0;
   return (
     <span className={`analytics-delta analytics-delta--${up ? "up" : "down"}`}>
-      {up ? "▲" : "▼"} {Math.abs(delta)} vs prior month
+      {up ? "▲" : "▼"} {Math.abs(delta)} vs previous month with data
     </span>
   );
 }
@@ -130,7 +130,7 @@ function TimeToHireHistogram({ months }: { months: TimeToHireMonth[] }) {
           key={m.month}
           className="analytics-histogram-bar"
           style={{ height: `${max > 0 ? (m.averageDays / max) * 100 : 0}%` }}
-          title={`${m.month}: ${m.averageDays}d avg (n=${m.sampleSize})`}
+          title={`${m.month}: ${m.averageDays}d avg (${m.sampleSize} placement${m.sampleSize === 1 ? "" : "s"})`}
         />
       ))}
     </div>
@@ -178,10 +178,10 @@ function DemandFunnel({
   demandScorePercent: number;
 }) {
   const stages = [
-    { label: "Active requisitions", detail: totalOpportunities !== undefined ? `n=${totalOpportunities}` : undefined, widthPct: 96 },
-    { label: "Signal-bearing roles", detail: signalBearing !== undefined ? `n=${signalBearing} instances` : undefined, widthPct: 74 },
-    { label: "High-confidence demand", detail: `${demandScorePercent}% score`, widthPct: 53 },
-    { label: "Human-reviewed opportunities", detail: undefined, widthPct: 32 },
+    { label: "Active requisitions", detail: totalOpportunities !== undefined ? `${totalOpportunities}` : undefined, widthPct: 96 },
+    { label: "Clues found", detail: signalBearing !== undefined ? `${signalBearing} clues (a posting can have several)` : undefined, widthPct: 74 },
+    { label: "Average demand-evidence score", detail: `${demandScorePercent}% (an average, not a count)`, widthPct: 53 },
+    { label: "Human-reviewed opportunities", detail: "No data yet", widthPct: 32 },
   ];
   return (
     <div className="analytics-funnel" role="img" aria-label="demand forecast funnel">
@@ -223,7 +223,6 @@ function KpiTile({
       </div>
       <div className="analytics-kpi-body">{children}</div>
       {caption && <p className="kpi-tile-caption">{caption}</p>}
-      <p className="kpi-tile-trend">Trend pending · needs 4+ weeks of ingestion</p>
       <p className="kpi-tile-why">Why it matters: {why}</p>
     </div>
   );
@@ -307,7 +306,7 @@ function PlacementsComboChart({
 // per decision 048's precedent that no bill_rate/pay_rate field exists
 // anywhere in this app.
 function ClientContributionPanel({ clients }: { clients: TopClient[] }) {
-  if (clients.length === 0) return <p className="caption">No placements recorded yet to rank clients by.</p>;
+  if (clients.length === 0) return <p className="caption">No data yet: no placements are recorded to rank client records by.</p>;
   const max = Math.max(...clients.map((c) => c.count));
   return (
     <div className="analytics-client-bars">
@@ -521,6 +520,8 @@ export function AnalyticsDashboard() {
   const { placementsPerMonth, timeToHire, demandScore, timeToHirePerMonth, topClientsByPlacements } = state.data;
   const lastMonth = placementsPerMonth.at(-1);
   const priorMonth = placementsPerMonth.at(-2);
+  const noPlacementData = placementsPerMonth.length === 0;
+  const totalPlacements = placementsPerMonth.reduce((sum, p) => sum + p.count, 0);
 
   return (
     <section aria-label="analytics dashboard">
@@ -530,44 +531,63 @@ export function AnalyticsDashboard() {
       <div className="kpi-grid">
         <KpiTile
           icon={Play}
-          label="Placements this month"
+          label="Placements in the latest month with data"
           why="the clearest signal of whether outreach is converting right now"
-          caption={`n=${placementsPerMonth.length} months loaded`}
+          caption={
+            noPlacementData
+              ? "No placement rows are loaded yet. Placement history is demo data until your team records real activity."
+              : `${placementsPerMonth.length} month${placementsPerMonth.length === 1 ? "" : "s"} of data · latest month: ${lastMonth?.month}`
+          }
         >
-          <span className="kpi-tile-value mono">{lastMonth?.count ?? 0}</span>
-          <DeltaArrow current={lastMonth?.count ?? 0} prior={priorMonth?.count} />
+          {noPlacementData ? (
+            <span className="kpi-tile-value mono">No data yet</span>
+          ) : (
+            <>
+              <span className="kpi-tile-value mono">{lastMonth?.count ?? 0}</span>
+              <DeltaArrow current={lastMonth?.count ?? 0} prior={priorMonth?.count} />
+            </>
+          )}
         </KpiTile>
 
         <KpiTile
           icon={Clock}
           label="Avg. time-to-hire"
           why="sets realistic client expectations for how long a fill takes"
-          caption={timeToHire.sampleSize > 0 ? `n=${timeToHire.sampleSize} placements` : "no closed placements yet"}
+          caption={timeToHire.sampleSize > 0 ? `Based on ${timeToHire.sampleSize} placement${timeToHire.sampleSize === 1 ? "" : "s"}` : "no closed placements yet"}
         >
           <div className="analytics-kpi-with-histogram">
-            <span className="kpi-tile-value mono">{timeToHire.averageDays ?? "—"}</span>
+            <span className="kpi-tile-value mono">{timeToHire.averageDays ?? "No data yet"}</span>
             <TimeToHireHistogram months={timeToHirePerMonth} />
           </div>
         </KpiTile>
 
         <KpiTile
           icon={Radar}
-          label="Demand score"
+          label="Average demand-evidence score"
           why="average opportunity confidence across the currently loaded data"
-          caption={demandScore.sampleSize > 0 ? `n=${demandScore.sampleSize} opportunities` : "no opportunities scored yet"}
+          caption={demandScore.sampleSize > 0 ? `Average of ${demandScore.sampleSize.toLocaleString()} opportunities` : "no opportunities scored yet"}
         >
           <DemandGauge percent={demandScore.average === null ? 0 : Math.round(demandScore.average * 100)} />
         </KpiTile>
 
         <KpiTile
           icon={Briefcase}
-          label="Active pipeline value"
+          label="Draft packages in progress"
           why="count of in-flight drafts, not a dollar figure — no bill/pay rate field exists"
-          caption={packageCounts ? `n=${packageCounts.total} packages total` : "n=packages not yet loaded"}
+          caption={
+            packageCounts
+              ? packageCounts.total === 0
+                ? "No packages have been drafted yet."
+                : `${packageCounts.total} package${packageCounts.total === 1 ? "" : "s"} in total`
+              : "Packages not loaded yet"
+          }
         >
-          <span className="kpi-tile-value mono">{packageCounts?.draft ?? "—"}</span>
+          <span className="kpi-tile-value mono">
+            {packageCounts ? (packageCounts.total === 0 ? "No data yet" : packageCounts.draft) : "—"}
+          </span>
         </KpiTile>
       </div>
+      <p className="trend-note">Trend lines are not shown yet: they need 4+ weeks of ingestion history.</p>
 
       <div className="analytics-grid-2">
         <div aria-label="placements per month" className="overview-card">
@@ -633,7 +653,7 @@ export function AnalyticsDashboard() {
 
       <div className="analytics-grid-2">
         <div aria-label="client contribution" className="overview-card">
-          <h3>Client contribution · top 10 by placements</h3>
+          <h3>Client records (CRM) · top 10 by placements</h3>
           <ClientContributionPanel clients={topClientsByPlacements} />
           <p className="caption">Ranked by the same event-based placement count as the KPI above (decision 020).</p>
         </div>
@@ -643,30 +663,16 @@ export function AnalyticsDashboard() {
             the REAL per-month histogram already computed for the "Avg.
             time-to-hire" KPI tile above (TimeToHireHistogram) rather than
             the mock's own explicitly-labeled-placeholder bars. */}
-        <div aria-label="time-to-hire distribution" className="overview-card">
-          <h3>Time-to-hire distribution</h3>
-          {timeToHirePerMonth.length === 0 ? (
-            <p className="caption">No closed placements yet to measure a distribution from.</p>
-          ) : (
-            <>
-              <TimeToHireHistogram months={timeToHirePerMonth} />
-              <p className="small">
-                n={timeToHire.sampleSize} placements · avg {timeToHire.averageDays ?? "—"} days
-              </p>
-              <p className="caption">Each bar is a real monthly average, not a binned count of individual placements.</p>
-            </>
-          )}
-        </div>
       </div>
 
       <div aria-label="client segments" className="overview-card">
-        <h3>Clients by hiring volume (advisory only)</h3>
+        <h3>Client records (CRM) by hiring volume (advisory only)</h3>
         {anomaliesState.status === "loading" && <p>Loading segments...</p>}
         {anomaliesState.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}
         {anomaliesState.status === "error" && <p>Could not load segments.</p>}
         {anomaliesState.status === "ok" &&
           (anomaliesState.data.segments.groups.length === 0 ? (
-            <p>No clients to segment yet.</p>
+            <p>No data yet: there are no client records (CRM) to segment.</p>
           ) : (
             anomaliesState.data.segments.groups.map((group) => (
               <div key={group.segment}>
@@ -719,13 +725,24 @@ export function AnalyticsDashboard() {
           Signals' banner, explicit that placements are seeded demo rows. */}
       <div className="signals-banner">
         <h3>Read this with the dataset in mind</h3>
-        <p>
-          Placements are seeded demo rows from `sales_pipeline_audit`, not real placements yet
-          — every count and chart above is real arithmetic over that seeded data, not a
-          fabricated number, but the underlying events themselves are demo data. Time-to-hire
-          and demand score are equally real computations that will only become meaningful
-          business signals once real pipeline activity and live ingestion history accumulate.
-        </p>
+        {totalPlacements === 0 ? (
+          <p>
+            No placement rows are loaded yet, so the placement charts above are empty. Any
+            placement rows that appear before real activity is recorded are demo data from
+            `sales_pipeline_audit`. Time-to-hire and the demand-evidence score are real
+            computations that will only become meaningful business signals once real pipeline
+            activity and live ingestion history accumulate.
+          </p>
+        ) : (
+          <p>
+            Placements are seeded demo rows from `sales_pipeline_audit`, not real placements yet
+            — every count and chart above is real arithmetic over that seeded data, not a
+            fabricated number, but the underlying events themselves are demo data. Time-to-hire
+            and the demand-evidence score are equally real computations that will only become
+            meaningful business signals once real pipeline activity and live ingestion history
+            accumulate.
+          </p>
+        )}
       </div>
     </section>
   );

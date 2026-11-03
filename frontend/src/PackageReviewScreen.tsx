@@ -128,7 +128,7 @@ function EmailDraftEditor({
         <div className="section-title">Editable email draft</div>
         {editable && (
           <button type="button" className="btn" onClick={() => setBody(aiDraft)}>
-            Restore AI draft
+            Restore generated draft
           </button>
         )}
       </div>
@@ -140,7 +140,6 @@ function EmailDraftEditor({
         aria-label="editable email draft"
       />
       <div className="between package-email-meta">
-        <span className="small">Word count · n={wordCount} words</span>
         <button type="button" className="btn" onClick={() => setPreview((p) => !p)}>
           {preview ? "Hide preview" : "Preview"}
         </button>
@@ -353,15 +352,11 @@ export function PackageReviewScreen() {
           <div className="opportunity-kpi-value">{draftsInQueue}</div>
         </div>
         <div className="opportunity-kpi-tile">
-          <div className="opportunity-kpi-label">Released this week</div>
+          <div className="opportunity-kpi-label">Released in the last 7 days</div>
           <div className="opportunity-kpi-value opportunity-kpi-value--accent">{releasedThisWeek}</div>
         </div>
-        <div className="opportunity-kpi-tile">
-          <div className="opportunity-kpi-label">Response rate</div>
-          <div className="opportunity-kpi-value">—</div>
-          <div className="signal-card-history">trend pending 4+ weeks — no outcome/response tracking exists yet</div>
-        </div>
       </div>
+      <p className="trend-note">Response rate is not tracked yet: no outcome or response tracking exists.</p>
 
       <form onSubmit={handleDraft} aria-label="draft a package" className="filterbar">
         <div>
@@ -431,8 +426,8 @@ export function PackageReviewScreen() {
                         {pkg.content.company} — {pkg.content.jobTitle}
                       </h4>
                       <span className="small">
-                        {pkg.aiGenerated ? "AI-generated draft" : "Manually authored"} ·{" "}
-                        {Math.round(pkg.content.confidenceScore * 100)}% confidence
+                        {pkg.aiGenerated ? "Template-generated draft" : "Manually authored"} ·{" "}
+                        demand evidence {Math.round(pkg.content.confidenceScore * 100)}%
                       </span>
                     </div>
                   </div>
