@@ -19,9 +19,11 @@ interface ContributionBarProps {
   // e.g. "Demand evidence" -- becomes part of every aria-label.
   title: string;
   factors: FactorLike[];
+  // Optional marker the guided tour uses to find this bar (no styling/behaviour).
+  dataTour?: string;
 }
 
-export function ContributionBar({ title, factors }: ContributionBarProps) {
+export function ContributionBar({ title, factors, dataTour }: ContributionBarProps) {
   const [pinned, setPinned] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const panelId = useId();
@@ -43,7 +45,7 @@ export function ContributionBar({ title, factors }: ContributionBarProps) {
   return (
     // The keydown handler only listens for Escape bubbling up from a focused
     // segment; the group itself is not interactive.
-    <div className="cbar" role="group" aria-label={`${title}: what moved the score`} onKeyDown={handleKeyDown}>
+    <div className="cbar" role="group" aria-label={`${title}: what moved the score`} onKeyDown={handleKeyDown} data-tour={dataTour}>
       <p className="cbar-title">{title}: what moved it</p>
       <div className="cbar-track">
         {factors.map((f, index) => {

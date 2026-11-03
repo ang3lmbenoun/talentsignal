@@ -363,7 +363,7 @@ export function HardToFillTargeting() {
         A role-difficulty signal points to a role worth reviewing; candidate fit shows skill overlap with that role. Check the reasons and missing skills, then decide whether to adjust the job criteria or source more candidates. Nothing is submitted automatically.
       </p>
 
-      <div className="filterbar targeting-filters" aria-label="Filter target roles">
+      <div className="filterbar targeting-filters" aria-label="Filter target roles" data-tour="targeting-company-grouping">
         <input className="select" type="search" placeholder="Search role or company" aria-label="Search role or company" value={query} onChange={(event) => setQuery(event.target.value)} />
         <select className="select" aria-label="Filter by company" value={client} onChange={(event) => setClient(event.target.value)}>
           <option value="all">All companies</option>{clients.map((name) => <option key={name} value={name}>{name}</option>)}

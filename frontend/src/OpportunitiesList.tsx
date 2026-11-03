@@ -669,7 +669,7 @@ function OpportunityCard({
           </div>
         </div>
 
-        <p className="card-verdict">{verdict}</p>
+        <p className="card-verdict" data-tour="opportunity-verdict">{verdict}</p>
 
         <div className="opportunity-score-wrap">
           <ConfidenceRing percent={confidencePct} />
@@ -702,7 +702,7 @@ function OpportunityCard({
         {/* Explainers pass: ONE stacked bar per score replaces the old bullet
             lists. The raw weights / values / weights version stay in the DOM
             under "Show the math" below, so the trust scenarios still hold. */}
-        {demandFactors.length > 0 && <ContributionBar title="Demand evidence" factors={demandFactors} />}
+        {demandFactors.length > 0 && <ContributionBar title="Demand evidence" factors={demandFactors} dataTour="opportunity-bar" />}
         {htfFactors.length > 0 && <ContributionBar title="Hard-to-fill signal" factors={htfFactors} />}
 
         <p className="card-what-changes">
@@ -886,7 +886,7 @@ function CompanyGroupedLanding({
           Companies in postings: {aggregates.length}, feeding {opportunities.length} loaded
           opportunities.
         </p>
-        <button type="button" className="btn" onClick={onViewAll}>
+        <button type="button" className="btn" onClick={onViewAll} data-tour="opportunities-view-all">
           View all opportunities (flat grid)
         </button>
       </div>
@@ -1064,7 +1064,7 @@ export function OpportunitiesList() {
 
       {view === "grid" && (
         <>
-      <button type="button" className="client-back-link" onClick={() => setView("grouped")}>
+      <button type="button" className="client-back-link" onClick={() => setView("grouped")} data-tour="opportunities-back">
         <ArrowLeft size={14} aria-hidden="true" /> Back to companies
       </button>
       <div className="filterbar">

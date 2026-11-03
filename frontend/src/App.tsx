@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard,
   Briefcase,
@@ -37,7 +37,7 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { clearStoredToken, getStoredToken, getStoredEmail, storeDisplayName, storeEmail } from "./auth";
 import { getStoredSidebarState, storeSidebarState } from "./sidebarState";
-import { OnboardingTour } from "./components/OnboardingTour";
+import { OnboardingTour, type TourCloseReason } from "./components/OnboardingTour";
 import { getTourUserId, hasSeenTour, markTourSeen } from "./lib/onboardingTour";
 
 type HealthState =
@@ -61,6 +61,9 @@ export function App({ onboarding = false }: AppProps = {}) {
   const [token, setToken] = useState<string | null>(() => getStoredToken());
   const [authView, setAuthView] = useState<AuthView>("login");
   const [tourOpen, setTourOpen] = useState(false);
+  // The screen the user was on when the tour started, so Skip / Escape can put
+  // them back there (the guided tour moves through the app's screens).
+  const viewBeforeTour = useRef("overview");
   // Which screen the sidebar nav is currently showing. Every screen stays
   // mounted (so it keeps fetching and so the role-gating tests still see it);
   // only the active one is visible — the others carry the `hidden` attribute.
@@ -131,16 +134,27 @@ export function App({ onboarding = false }: AppProps = {}) {
   useEffect(() => {
     if (!onboarding || !token) return;
     const userId = getTourUserId(token);
-    if (userId && !hasSeenTour(userId)) setTourOpen(true);
+    if (userId && !hasSeenTour(userId)) {
+      viewBeforeTour.current = view;
+      setTourOpen(true);
+    }
   }, [onboarding, token]);
+
+  function openTour() {
+    viewBeforeTour.current = view;
+    setTourOpen(true);
+  }
 
   // Called for "Get started", "Skip tour" and Escape alike. It only ever SETS
   // the seen flag, so replaying the tour from the header can't make it
   // auto-open again later.
-  function closeTour() {
+  // "Get started" lands on Overview; Skip / Escape return to the screen the
+  // user started from.
+  function closeTour(reason?: TourCloseReason) {
     const userId = getTourUserId(token);
     if (userId) markTourSeen(userId);
     setTourOpen(false);
+    setView(reason === "finish" ? "overview" : viewBeforeTour.current);
   }
 
   function handleLogout() {
@@ -252,7 +266,7 @@ export function App({ onboarding = false }: AppProps = {}) {
           health={healthPill}
           email={getStoredEmail()}
           onLogout={handleLogout}
-          onTakeTour={onboarding ? () => setTourOpen(true) : undefined}
+          onTakeTour={onboarding ? openTour : undefined}
         />
 
         <main className="content">
@@ -333,7 +347,7 @@ export function App({ onboarding = false }: AppProps = {}) {
           </div>
         </main>
       </div>
-      {onboarding && tourOpen && <OnboardingTour onClose={closeTour} />}
+      {onboarding && tourOpen && <OnboardingTour onClose={closeTour} onNavigate={setView} />}
     </div>
   );
 }

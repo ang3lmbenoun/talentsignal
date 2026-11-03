@@ -91,3 +91,32 @@
 /* "Take the tour" link in the top bar (rendered by TopBar, styled here to keep
    theme.css untouched). */
 .topbar-tour-link{ display:inline-flex; align-items:center; gap:6px; font-size:13px; white-space:nowrap; }
+
+/* ---- Guided mode: spotlight + anchored tooltip (new section) -------------
+   The overlay turns transparent and the spotlight's huge box-shadow does the
+   dimming, which leaves a clean cut-out around the target. The overlay itself
+   still catches clicks, so the page behind cannot be used mid-tour. */
+.tour-overlay--anchored{ display:block; background:transparent; }
+.tour-spotlight{
+  position:fixed; border-radius:calc(var(--radius) + 2px);
+  box-shadow:0 0 0 9999px rgba(13,19,26,.55);
+  pointer-events:none;
+}
+.tour-pulse{
+  position:absolute; inset:-4px; border:2px solid var(--accent); border-radius:inherit;
+  opacity:0; pointer-events:none;
+}
+.tour-card-shell--anchored{ animation:none; max-height:calc(100vh - 32px); }
+
+@keyframes tour-pulse{
+  from{ opacity:.9; transform:scale(1); }
+  to{ opacity:0; transform:scale(1.06); }
+}
+
+/* Glide and pulse only when the user has not asked for less motion. The ring
+   runs exactly two pulses (iteration count 2) and then stays invisible. */
+@media (prefers-reduced-motion: no-preference){
+  .tour-spotlight{ transition:top .25s ease, left .25s ease, width .25s ease, height .25s ease; }
+  .tour-card-shell--anchored{ transition:top .25s ease, left .25s ease; }
+  .tour-pulse{ animation:tour-pulse 1.1s ease-out 2; }
+}

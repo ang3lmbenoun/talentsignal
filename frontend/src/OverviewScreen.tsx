@@ -664,7 +664,7 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
           moved into "Show the math". Labels say what each count is. */}
       {canSeeOpportunities && (
         <>
-          <div className="kpi-grid">
+          <div className="kpi-grid" data-tour="overview-kpis">
             <KpiTile
               icon={Flame}
               value={hardToFillCount.status === "ok" ? String(hardToFillCount.count) : tileValue(hardToFillCount)}

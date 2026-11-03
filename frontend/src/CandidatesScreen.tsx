@@ -397,7 +397,7 @@ export function CandidatesScreen() {
                       )}
                   </div>
                 </div>
-                <div className="opportunity-why">
+                <div className="opportunity-why" data-tour="candidates-fit">
                   <b>Why this candidate matches</b>
                   {jobOpenings.length === 0
                     ? "No job openings on file yet to compare against."
