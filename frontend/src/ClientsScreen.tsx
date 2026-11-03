@@ -169,6 +169,7 @@ export function ClientsScreen() {
   return (
     <section aria-label="clients">
       <h2>Clients</h2>
+      <p className="screen-description">Compare each client’s open requisitions and source quality. A flagged feed is shown for context and excluded from measured scarcity.</p>
 
       {opportunitiesState.status === "loading" && <p>Loading clients...</p>}
       {opportunitiesState.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}
@@ -178,16 +179,17 @@ export function ClientsScreen() {
         <>
           <div className="client-kpi-strip">
             <div className="opportunity-kpi-tile">
-              <div className="opportunity-kpi-label">Total clients</div>
+              <div className="opportunity-kpi-label">Client companies</div>
               <div className="opportunity-kpi-value">{totalClients}</div>
             </div>
             <div className="opportunity-kpi-tile">
-              <div className="opportunity-kpi-label">Active clients (open reqs)</div>
+              <div className="opportunity-kpi-label">With open requisitions</div>
               <div className="opportunity-kpi-value">{activeClients}</div>
             </div>
             <div className="opportunity-kpi-tile">
-              <div className="opportunity-kpi-label">Median days_open (live sources)</div>
+              <div className="opportunity-kpi-label">Median days open · live sources</div>
               <div className="opportunity-kpi-value opportunity-kpi-value--accent">{liveMedian ?? "—"}</div>
+            <p className="opportunity-kpi-why">How long current live-source requisitions have been open; flagged feeds are left out.</p>
             </div>
           </div>
 

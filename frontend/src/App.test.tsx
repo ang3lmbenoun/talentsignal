@@ -21,7 +21,7 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() =>
-      expect(screen.getByText(/Backend reachable/i)).toBeInTheDocument(),
+      expect(screen.getByText(/Workspace ready/i)).toBeInTheDocument(),
     );
   });
 
@@ -31,7 +31,7 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() =>
-      expect(screen.getByText(/Backend unreachable/i)).toBeInTheDocument(),
+      expect(screen.getByText(/Some workspace data may be unavailable/i)).toBeInTheDocument(),
     );
   });
 

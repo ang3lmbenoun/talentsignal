@@ -82,72 +82,31 @@ const SIGNALS: SignalDef[] = [
     color: "#dc6370",
     test: (o) => o.reasons.some((r) => r.includes("no salary range")),
   },
-  {
-    name: "Measured role-scarcity",
-    field: "basis = measured",
-    why: "Observed scarcity supports stronger evidence.",
-    countsTowardHero: false,
-    color: "#43a9b7",
-    test: () => false,
-  },
-  {
-    name: "Curated role-scarcity",
-    field: "basis = curated",
-    why: "Curated evidence is useful but distinct from direct measurement.",
-    countsTowardHero: false,
-    color: "#9a83db",
-    test: () => false,
-  },
 ];
+
+const FAMILY_LABELS: Record<string, string> = {
+  "engineering-swe": "Software engineering", "ml-ai": "AI & machine learning",
+  "data-analytics": "Data & analytics", security: "Security", "cloud-infra": "Cloud & infrastructure",
+  "support-cs": "Support & customer success", "sales-bizdev": "Sales & business development",
+  "retail-ops": "Retail & operations", "general-other": "Other or unclassified roles",
+};
+
+const NEXT_STEPS: Record<string, string> = {
+  "Reposted roles": "Check whether the client still needs this role and what changed since the earlier posting.",
+  "Long-open (≥54d)": "Review the role requirements and sourcing approach with the client.",
+  "Very stale (≥365d)": "Confirm the requisition is still active before spending sourcing time.",
+  "No salary range": "Ask the client for compensation context before presenting candidates.",
+};
 
 const FAMILY_PALETTE = ["#655be1", "#16a18d", "#d46a9a", "#d08b22", "#667085", "#8869db"];
 
 const SOURCE_HEALTH_WHY: Record<string, string> = {
-  healthy: "A healthy feed is usable measured context.",
-  fixture: "Fixture rows demonstrate the interface, not live demand.",
-  "flagged — excluded": "Flagged and excluded from the median because it's skewed by requisitions open far longer than typical.",
+  healthy: "Dates from this source can be used when comparing how long similar roles stay open.",
+  fixture: "Demo records show how the screen works; they are not live hiring demand.",
+  "flagged — excluded": "Dates from this source are left out of scarcity comparisons until their meaning is verified.",
 };
 
-const RADIUS = 45;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-const INNER_RADIUS = 32;
-const INNER_CIRCUMFERENCE = 2 * Math.PI * INNER_RADIUS;
-
-// S-25 hero: two concentric arcs instead of a bare number. Outer arc =
-// signal-instance density (totalInstances / (4 * n) -- 4 is the real count
-// of hero-eligible signal types, so this reads as "how many of the 4
-// possible signals the average opportunity carries"). Inner arc = coverage
-// (opportunities with >=1 hero signal / n). Both are real ratios of real
-// counts, normalized the way the mockup's own caption describes ("arcs are
-// normalized to their respective totals").
-function SignalGauge({ densityPct, coveragePct, totalInstances, n }: { densityPct: number; coveragePct: number; totalInstances: number; n: number }) {
-  const outerDash = (densityPct / 100) * CIRCUMFERENCE;
-  const innerDash = (coveragePct / 100) * INNER_CIRCUMFERENCE;
-  return (
-    <div className="signals-gauge">
-      <svg viewBox="0 0 120 120" className="signals-gauge-svg" role="img" aria-label={`${totalInstances} signal instances across ${n} loaded opportunities`}>
-        <g transform="rotate(-90 60 60)">
-          <circle cx="60" cy="60" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="11" />
-          <circle
-            cx="60" cy="60" r={RADIUS} fill="none" stroke="var(--accent)" strokeWidth="11" strokeLinecap="round"
-            strokeDasharray={`${outerDash} ${CIRCUMFERENCE - outerDash}`}
-          />
-          <circle cx="60" cy="60" r={INNER_RADIUS} fill="none" stroke="var(--border)" strokeWidth="7" />
-          <circle
-            cx="60" cy="60" r={INNER_RADIUS} fill="none" stroke="var(--success)" strokeWidth="7" strokeLinecap="round"
-            strokeDasharray={`${innerDash} ${INNER_CIRCUMFERENCE - innerDash}`}
-          />
-        </g>
-      </svg>
-      <div className="signals-gauge-center">
-        <strong>{totalInstances}</strong>
-        signals · n={n} opps
-      </div>
-    </div>
-  );
-}
-
-export function SignalsScreen() {
+export function SignalsScreen({ onNavigate }: { onNavigate?: (view: string) => void }) {
   const [state, setState] = useState<OpportunitiesState>({ status: "loading" });
 
   useEffect(() => {
@@ -209,17 +168,9 @@ export function SignalsScreen() {
     opportunities.filter((o) => sig.test(o, daysOpenByOpp.get(o.id))).length;
   const measuredCount = opportunities.filter((o) => effectiveBasis(o) === "measured").length;
   const curatedCount = opportunities.filter((o) => effectiveBasis(o) === "curated").length;
-  const signalCounts = SIGNALS.map((sig) => ({
-    ...sig,
-    count:
-      sig.name === "Measured role-scarcity" ? measuredCount : sig.name === "Curated role-scarcity" ? curatedCount : heroSignalCount(sig),
-  }));
-  // Hero total intentionally unchanged: sum of only the four signals that
-  // were already real fields before this hotfix (per the "do NOT touch the
-  // hero KPI" constraint) -- measured/curated are now real too, but adding
-  // them would move the hero number, so they're shown in their own tiles
-  // without feeding this sum.
-  const totalInstances = signalCounts.filter((s) => s.countsTowardHero).reduce((sum, s) => sum + s.count, 0);
+  const noBasisCount = n - measuredCount - curatedCount;
+  const signalCounts = SIGNALS.map((sig) => ({ ...sig, count: heroSignalCount(sig) }));
+  const totalInstances = signalCounts.reduce((sum, s) => sum + s.count, 0);
 
   const families = new Map<string, number>();
   for (const o of opportunities) {
@@ -238,15 +189,11 @@ export function SignalsScreen() {
 
   const distinctCompanies = new Set(opportunities.map((o) => o.company)).size;
 
-  // S-25 gauge inputs: real ratios, see SignalGauge's own comment for the
-  // derivation. HERO_SIGNAL_DEFS is the same 4-signal set that already
-  // feeds totalInstances above.
-  const heroSignalDefs = SIGNALS.filter((s) => s.countsTowardHero);
+  const heroSignalDefs = SIGNALS;
   const oppsWithAnyHeroSignal = opportunities.filter((o) =>
     heroSignalDefs.some((sig) => sig.test(o, daysOpenByOpp.get(o.id))),
   ).length;
   const coveragePct = n > 0 ? Math.round((oppsWithAnyHeroSignal / n) * 100) : 0;
-  const densityPct = n > 0 ? Math.round((totalInstances / (heroSignalDefs.length * n)) * 100) : 0;
 
   // S-25 role-family "why this matters" -- real, computed: names the
   // dominant family, and (if one source clearly drives it) names that
@@ -262,130 +209,80 @@ export function SignalsScreen() {
     const topSource = [...sourceCounts.entries()].sort((a, b) => b[1] - a[1])[0];
     familyWhy =
       topSource && topSource[1] / famRows.length >= 0.6
-        ? `${famName} dominates because ${topSource[0]}'s feed is ${famName}-heavy.`
-        : `${famName} is the most common role family in the loaded set, at ${Math.round((famCount / n) * 100)}%.`;
+        ? `${FAMILY_LABELS[famName] ?? famName} appears most often because ${topSource[0]}'s feed contains many roles of this type.`
+        : `${FAMILY_LABELS[famName] ?? famName} is the most common type in the loaded set (${Math.round((famCount / n) * 100)}%).`;
     if (families.has("general-other")) {
-      familyWhy += " general-other includes leadership and unclassified titles by design.";
+          familyWhy += " Other or unclassified includes job titles that do not fit the named role types.";
     }
   }
-  const familyTotal = familyEntries.reduce((sum, [, count]) => sum + count, 0);
-  let familyCumulative = 0;
-
   return (
     <section aria-label="signals">
       <h2>Signals</h2>
+      <p className="screen-description">Signals are practical clues in job postings that can help your team decide which roles deserve a closer look. One role can show more than one clue, so counts overlap.</p>
 
-      {/* S-25: hero is now a two-arc radial gauge (outer = signal-instance
-          density, inner = opportunity coverage) instead of a bare number --
-          see SignalGauge's own comment for the real derivation. */}
-      <div className="signals-hero signals-hero--gauge">
-        <SignalGauge densityPct={densityPct} coveragePct={coveragePct} totalInstances={totalInstances} n={n} />
-        <div className="signals-hero-copy">
-          <div className="signals-hero-eyebrow">Signal density</div>
-          <h3 className="signals-hero-headline">Several reasons can reinforce one opportunity.</h3>
-          <p className="signals-hero-explainer">
-            Outer arc: {densityPct}% signal-instance density (instances ÷ 4 possible per opportunity). Inner arc:
-            {" "}{coveragePct}% of opportunities carry at least one signal. Arcs are normalized to their own totals.
-          </p>
-          <div className="opportunity-why">
-            <b>Why this matters</b>
-            Multiple independent cues help explain why a requisition may be difficult to fill; they are evidence to
-            review, not a promise.
-          </div>
+      <div className="signals-overview">
+        <div className="signals-overview-card">
+          <span className="signals-overview-label">Roles with at least one hiring clue</span>
+          <strong>{oppsWithAnyHeroSignal.toLocaleString()} <small>of {n.toLocaleString()} loaded postings</small></strong>
+          <div className="signals-overview-track"><i style={{ width: `${coveragePct}%` }} /></div>
+          <p>These roles show at least one pattern below. This is a review queue, not a prediction that a role will be filled.</p>
         </div>
-        <div
-          className="signals-hero-movement"
-          title="No week-over-week history in the data yet. Requires new field: weekly_delta."
-        >
-          <div className="signals-hero-label">Net movement this week</div>
-          <div>
-            pending — requires new field: <code>weekly_delta</code>
-          </div>
+        <div className="signals-overview-card signals-overview-card--accent">
+          <span className="signals-overview-label">Hiring clues found</span>
+          <strong>{totalInstances.toLocaleString()} <small>across {n.toLocaleString()} postings</small></strong>
+          <p>Each clue is counted separately; a single posting may contribute several. No week-to-week trend is shown because there is not enough history yet.</p>
+          <button type="button" className="btn" onClick={() => onNavigate?.("opportunities")}>Review opportunities →</button>
         </div>
       </div>
+      {sourceHealth.some((source) => source.verdict === "flagged — excluded") && (
+        <div className="opportunity-source-caution" role="note">
+          <b>Some posting dates are not verified</b>
+          Long-open and stale counts below include all loaded sources. Lever’s unusually old dates are excluded from measured role-scarcity comparisons, but still appear in these age-pattern counts. Treat them as prompts to verify active status.
+        </div>
+      )}
 
-      <h3>Signal mix · one combined view</h3>
+      <div className="signals-section-heading">
+        <div><h3>What the signals are telling you</h3><p>Each bar shows how many of the {n.toLocaleString()} postings currently loaded match that clue. A posting can appear in more than one bar.</p></div>
+      </div>
       {/* S-25: stacked horizontal bar replaces the old bare 6-tile grid as
           the primary visual -- every segment is a real count / n, widths
           sum to the real per-opportunity signal-instance total (counts can
           exceed n since one row may carry several signals). */}
-      <div
-        className="signals-stack"
-        role="img"
-        aria-label={`Signal mix: ${signalCounts.map((s) => `${s.name} ${s.count}`).join(", ")}`}
-      >
-        {signalCounts.map((sig) => {
-          const stackTotal = signalCounts.reduce((sum, s) => sum + s.count, 0);
-          const pct = stackTotal > 0 ? (sig.count / stackTotal) * 100 : 0;
-          return pct > 0 ? (
-            <span
-              key={sig.name}
-              className="signals-stack-seg"
-              style={{ width: `${pct}%`, background: sig.color }}
-              title={`${sig.name}: n=${sig.count}`}
-            />
-          ) : null;
-        })}
-      </div>
-
-      <div className="signals-grid">
+      <div className="signals-grid signals-grid--plain">
         {signalCounts.map((sig) => (
           <div className="signal-card" key={sig.name}>
             <span className="signal-card-swatch" style={{ background: sig.color }} />
-            <div className="signal-card-name">{sig.name}</div>
-            <div className="signal-card-count">
-              {sig.count} <small>n=</small>
-            </div>
-            <div className="signal-card-why">Why: {sig.why}</div>
-            <div className="signal-card-history">needs 4+ weeks of ingestion for a trend</div>
+            <div className="signal-card-name">{sig.name === "Long-open (≥54d)" ? "Open 54 days or more" : sig.name === "Very stale (≥365d)" ? "Open at least one year" : sig.name}</div>
+            <div className="signal-card-count">{sig.count.toLocaleString()} <small>of {n.toLocaleString()} postings · {Math.round((sig.count / n) * 100)}%</small></div>
+            <div className="signals-bar-track"><i style={{ width: `${Math.min(100, (sig.count / n) * 100)}%`, background: sig.color }} /></div>
+            <div className="signal-card-why">{sig.why}</div>
+            <div className="signal-card-next"><b>Useful next step</b>{NEXT_STEPS[sig.name]}</div>
           </div>
         ))}
       </div>
 
+      <div className="signals-basis-panel">
+        <div className="signals-section-heading">
+          <div><h3>How much to trust the role-scarcity evidence</h3><p>These labels describe the evidence behind role scarcity; they are not additional hiring signals.</p></div>
+        </div>
+        <div className="signals-basis-grid">
+          <div><b>Measured evidence</b><strong>{measuredCount.toLocaleString()}</strong><span>Postings with eligible live data to compare role-family posting duration.</span></div>
+          <div><b>Reviewed role guidance</b><strong>{curatedCount.toLocaleString()}</strong><span>Titles on a reviewed role list; this is guidance, not a measured scarcity rate.</span></div>
+          <div><b>No role-difficulty evidence</b><strong>{noBasisCount.toLocaleString()}</strong><span>No evidence to estimate role scarcity yet. Other hiring clues may still be present.</span></div>
+        </div>
+      </div>
+
       <div className="signals-columns">
         <div className="signals-panel">
-          <h3>Role-family distribution</h3>
-          <p className="signals-panel-caption">Share of loaded opportunities by role_family · n={n}</p>
-          <div className="donut-wrap">
-            <svg viewBox="0 0 100 100" className="donut-svg-sm" role="img" aria-label="Role-family distribution donut">
-              <g transform="rotate(-90 50 50)">
-                {familyEntries.map(([family, count], i) => {
-                  const donutRadius = 34;
-                  const donutCircumference = 2 * Math.PI * donutRadius;
-                  const dash = familyTotal > 0 ? (count / familyTotal) * donutCircumference : 0;
-                  const offset = -familyCumulative;
-                  familyCumulative += dash;
-                  return (
-                    <circle
-                      key={family}
-                      cx="50"
-                      cy="50"
-                      r={donutRadius}
-                      fill="none"
-                      stroke={FAMILY_PALETTE[i % FAMILY_PALETTE.length]}
-                      strokeWidth="13"
-                      strokeDasharray={`${dash} ${donutCircumference - dash}`}
-                      strokeDashoffset={offset}
-                    />
-                  );
-                })}
-              </g>
-              <text x="50" y="53" textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--text)">
-                n={n}
-              </text>
-            </svg>
-            <ul className="signals-family-legend">
-              {familyEntries.map(([family, count], i) => (
-                <li key={family}>
-                  <span
-                    className="signals-family-swatch"
-                    style={{ background: FAMILY_PALETTE[i % FAMILY_PALETTE.length] }}
-                  />
-                  <span>{family}</span>
-                  <span className="signals-family-pct">{Math.round((count / n) * 100)}%</span>
-                </li>
-              ))}
-            </ul>
+          <h3>Which kinds of roles are in the feed?</h3>
+          <p className="signals-panel-caption">Each bar is a role type’s share of the {n.toLocaleString()} loaded postings. A longer bar means more postings of that type.</p>
+          <div className="signals-family-bars" role="list" aria-label="Loaded postings by role type">
+            {familyEntries.map(([family, count], i) => (
+              <div className="signals-family-bar-row" role="listitem" key={family}>
+                <div className="signals-family-bar-label"><span>{FAMILY_LABELS[family] ?? family}</span><b>{count.toLocaleString()} <small>postings · {Math.round((count / n) * 100)}%</small></b></div>
+                <div className="signals-family-bar-track" role="img" aria-label={`${FAMILY_LABELS[family] ?? family}: ${count} of ${n} postings, ${Math.round((count / n) * 100)} percent`}><i style={{ width: `${(count / n) * 100}%`, background: FAMILY_PALETTE[i % FAMILY_PALETTE.length] }} /></div>
+              </div>
+            ))}
           </div>
           {familyWhy && (
             <div className="opportunity-why">
@@ -397,13 +294,13 @@ export function SignalsScreen() {
 
         <div className="signals-panel">
           <h3>Source health</h3>
-          <p className="signals-panel-caption">Median days_open per source · live n={n}</p>
+          <p className="signals-panel-caption">How many postings come from each source, and whether its dates can support role-difficulty comparisons.</p>
           {sourceHealth.map((s) => (
             <div className="signal-source-row" key={s.source}>
               <div>
-                <div className="signal-source-name">{s.source}</div>
+            <div className="signal-source-name">{s.source === "greenhouse" ? "Greenhouse" : s.source === "lever" ? "Lever" : s.source}</div>
                 <div className="signal-source-detail">
-                  {s.count} opp{s.count === 1 ? "" : "s"} · median {s.medianDaysOpen}d
+                  {s.count.toLocaleString()} postings · median listed age {s.medianDaysOpen.toLocaleString()} days
                 </div>
                 <div className="signal-source-why">Why: {SOURCE_HEALTH_WHY[s.verdict]}</div>
               </div>
@@ -412,7 +309,7 @@ export function SignalsScreen() {
                   s.verdict === "healthy" ? "healthy" : s.verdict === "fixture" ? "fixture" : "excluded"
                 }`}
               >
-                {s.verdict}
+                {s.verdict === "healthy" ? "Usable for measured evidence" : s.verdict === "fixture" ? "Demo sample" : "Flagged — excluded from scarcity evidence"}
               </span>
             </div>
           ))}
@@ -423,13 +320,9 @@ export function SignalsScreen() {
           border per the mockup's .banner treatment (was a plain <h3>/<p>
           block, same text). */}
       <div className="signals-banner">
-        <h3>Read these numbers with the dataset in mind</h3>
+        <h3>What this view includes</h3>
         <p>
-          Current dataset: {n} opportunities from {distinctCompanies} compan{distinctCompanies === 1 ? "y" : "ies"}.
-          Percentage metrics are directionally useful but limited by company-universe size — they will scale
-          meaningfully past 10+ companies. This view aggregates whatever is currently loaded, so every
-          percentage is only as coarse or precise as the loaded set. Counts overlap: one opportunity may carry
-          several signals.
+          This view covers {n.toLocaleString()} job postings across {distinctCompanies.toLocaleString()} client names in the current load. Signal counts may overlap because one posting can have several clues. The listed actions are prompts for human review, not automated decisions. Trends need at least four weeks of ingestion history.
         </p>
       </div>
     </section>

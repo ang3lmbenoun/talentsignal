@@ -55,6 +55,12 @@ export interface OpportunityRow {
   // backfilled) have no value. Was already a real column, just never
   // reached toOpportunityResponse()'s return shape before S-24.
   family_key: string | null;
+  // S-30b (migration 022): a human edit via PATCH /api/opportunities/:id,
+  // or NULL if never edited. Surfaced here (first time this route has
+  // exposed either) so the frontend JD editor can pre-fill with the real
+  // current value instead of guessing from the title.
+  required_skills: string[] | null;
+  required_years: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -98,6 +104,11 @@ export function toOpportunityResponse(row: OpportunityRow) {
     // column has existed since migration 018, this is just the first route
     // to expose it.
     familyKey: row.family_key,
+    // S-30b: null until a human edits via the JD editor -- the frontend
+    // falls back to the same title-derived guess the backend's fit engine
+    // uses (decision 058), never a separate guess of its own.
+    requiredSkills: row.required_skills,
+    requiredYears: row.required_years,
     source: row.source,
     externalSignalId: row.external_signal_id,
     createdAt: row.created_at,

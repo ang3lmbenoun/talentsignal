@@ -53,6 +53,8 @@ export function CandidatesScreen() {
   const [submitting, setSubmitting] = useState(false);
   // Visual stub only -- no backend, no parsing. See S-27 (deferred story).
   const [uploadToast, setUploadToast] = useState(false);
+  const [candidateSearch, setCandidateSearch] = useState("");
+  const [availabilityFilter, setAvailabilityFilter] = useState("all");
   const role = getStoredRole();
   const canManage = role !== null && CAN_MANAGE_ROLES.includes(role);
   // contactInfo only ever appears in the response for recruiter/admin — any
@@ -180,25 +182,36 @@ export function CandidatesScreen() {
     candidates.length > 0
       ? Math.round((bestMatches.reduce((sum, m) => sum + (m?.result.matchedSkills.length ?? 0), 0) / candidates.length) * 10) / 10
       : 0;
+  const visibleCandidates = candidates.filter((candidate) => {
+    const haystack = `${candidate.name} ${candidate.skills.join(" ")}`.toLowerCase();
+    if (candidateSearch.trim() && !haystack.includes(candidateSearch.trim().toLowerCase())) return false;
+    if (availabilityFilter === "known" && !candidate.availability) return false;
+    if (availabilityFilter === "unknown" && candidate.availability) return false;
+    return true;
+  });
 
   return (
     <section aria-label="candidates">
       <h2>Candidates</h2>
+      <p className="screen-description">Review candidate profiles and the evidence available for matching. Fixture profiles are demo data; uploaded files are not parsed yet.</p>
 
       <div className="opportunity-kpi-strip">
         <div className="opportunity-kpi-tile">
           <div className="opportunity-kpi-label">Total candidates</div>
           <div className="opportunity-kpi-value">{totalCandidates}</div>
+          <p className="opportunity-kpi-why">Profiles currently in the candidate pool.</p>
         </div>
         <div className="opportunity-kpi-tile">
           <div className="opportunity-kpi-label">Available now</div>
           <div className="opportunity-kpi-value opportunity-kpi-value--accent">{availableNow}</div>
+          <p className="opportunity-kpi-why">Profiles marked available now; availability can be missing.</p>
         </div>
         <div className="opportunity-kpi-tile">
           <div className="opportunity-kpi-label">Avg. skills matched</div>
           <div className="opportunity-kpi-value" title="Average real skill overlap with the best-matching job opening on file, per candidate.">
             {jobOpenings.length > 0 ? avgSkillsMatched : "—"}
           </div>
+          <p className="opportunity-kpi-why">Average skill overlap with each candidate’s best listed job; unavailable when no jobs exist.</p>
         </div>
       </div>
 
@@ -339,9 +352,17 @@ export function CandidatesScreen() {
       {state.status === "error" && <p>Could not load candidates.</p>}
       {state.status === "ok" && candidates.length === 0 && <p>No candidates yet.</p>}
       {state.status === "ok" && candidates.length > 0 && (
+        <>
+        <div className="filterbar candidate-filters">
+          <input className="select" type="search" placeholder="Search name or skills" aria-label="Search candidates by name or skills" value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} />
+          <select className="select" aria-label="Filter by availability information" value={availabilityFilter} onChange={(event) => setAvailabilityFilter(event.target.value)}>
+            <option value="all">All availability</option><option value="known">Availability on file</option><option value="unknown">Availability not listed</option>
+          </select>
+          <span className="caption">Showing {visibleCandidates.length} of {candidates.length} profiles</span>
+        </div>
         <ul aria-label="candidate list" className="candidate-grid">
-          {candidates.map((candidate, i) => {
-            const bestMatch = bestMatches[i];
+          {visibleCandidates.map((candidate) => {
+            const bestMatch = bestMatchForCandidate(candidate, jobOpenings);
             return (
               <li className="overview-card candidate-card" key={candidate.id}>
                 <div className="candidate-row">
@@ -385,6 +406,8 @@ export function CandidatesScreen() {
             );
           })}
         </ul>
+        {visibleCandidates.length === 0 && <p className="targeting-empty-state">No candidates match these filters. Try another name or skill.</p>}
+        </>
       )}
     </section>
   );

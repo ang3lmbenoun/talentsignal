@@ -55,16 +55,16 @@ describe("clientWhyItMatters", () => {
     const rows: ClientOpportunity[] = [makeRow({ id: "1", company: "Gopuff", source: "lever", reasons: ["open 1146 days"] })];
     const aggregates = computeClientAggregates(rows);
     const sentence = clientWhyItMatters(aggregates[0], aggregates);
-    expect(sentence).toContain("flagged and excluded");
+    expect(sentence).toContain("excluded from measured role-scarcity comparisons");
   });
 
-  it("calls out the top healthy source by open req count", () => {
+  it("names a healthy source as a live source eligible for measured comparisons", () => {
     const rows: ClientOpportunity[] = [
       makeRow({ id: "1", company: "GitLab", source: "greenhouse", reasons: ["open 30 days"] }),
       makeRow({ id: "2", company: "GitLab", source: "greenhouse", reasons: ["open 30 days"] }),
     ];
     const aggregates = computeClientAggregates(rows);
     const sentence = clientWhyItMatters(aggregates[0], aggregates);
-    expect(sentence).toContain("hottest live signal source");
+    expect(sentence).toContain("Greenhouse is a live source eligible for measured role-scarcity comparisons");
   });
 });

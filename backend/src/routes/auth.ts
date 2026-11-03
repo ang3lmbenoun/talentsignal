@@ -5,6 +5,7 @@ import type { Pool } from "pg";
 import { logger } from "../logger";
 import { signAccessToken } from "../auth/jwt";
 import { BCRYPT_COST, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from "../auth/passwordHashing";
+import { requireAuth } from "../middleware/requireAuth";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -43,6 +44,74 @@ export function authRouter(pool: Pool): Router {
   // auth.rateLimit.test.ts's "does not rate-limit a non-auth route" case.
   router.use("/auth", authRateLimit);
 
+  router.get("/auth/me", requireAuth, async (req, res) => {
+    try {
+      const { rows } = await pool.query(
+        "SELECT id, email, display_name, role FROM users WHERE id = $1",
+        [req.user!.id],
+      );
+      const user = rows[0];
+      if (!user) {
+        res.status(404).json({ error: "account not found" });
+        return;
+      }
+      res.status(200).json({ user: { id: user.id, email: user.email, displayName: user.display_name, role: user.role } });
+    } catch (err) {
+      logger.error({ correlationId: req.correlationId, err }, "profile lookup failed");
+      res.status(500).json({ error: "profile could not be loaded" });
+    }
+  });
+
+  router.patch("/auth/me", requireAuth, async (req, res) => {
+    const displayName = typeof req.body?.displayName === "string" ? req.body.displayName.trim() : "";
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const currentPassword = typeof req.body?.currentPassword === "string" ? req.body.currentPassword : "";
+    if (displayName.length < 1 || displayName.length > 80) {
+      res.status(400).json({ error: "name must be between 1 and 80 characters" });
+      return;
+    }
+    if (!EMAIL_RE.test(email) || email.length > 254) {
+      res.status(400).json({ error: "enter a valid email address" });
+      return;
+    }
+
+    try {
+      const currentResult = await pool.query(
+        "SELECT email, password_hash FROM users WHERE id = $1",
+        [req.user!.id],
+      );
+      const currentUser = currentResult.rows[0] as { email: string; password_hash: string } | undefined;
+      if (!currentUser) {
+        res.status(404).json({ error: "account not found" });
+        return;
+      }
+      if (email !== currentUser.email.toLowerCase()) {
+        if (!currentPassword || !(await bcrypt.compare(currentPassword, currentUser.password_hash))) {
+          res.status(403).json({ error: "enter your current password to change your sign-in email" });
+          return;
+        }
+      }
+      const { rows } = await pool.query(
+        `UPDATE users SET display_name = $1, email = $2, updated_at = now()
+         WHERE id = $3 RETURNING id, email, display_name, role`,
+        [displayName, email, req.user!.id],
+      );
+      const user = rows[0];
+      if (!user) {
+        res.status(404).json({ error: "account not found" });
+        return;
+      }
+      res.status(200).json({ user: { id: user.id, email: user.email, displayName: user.display_name, role: user.role } });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        res.status(409).json({ error: "that email address is already in use" });
+        return;
+      }
+      logger.error({ correlationId: req.correlationId, err }, "profile update failed");
+      res.status(500).json({ error: "profile could not be updated" });
+    }
+  });
+
   router.post("/auth/register", async (req, res) => {
     const email =
       typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
@@ -69,12 +138,12 @@ export function authRouter(pool: Pool): Router {
       const { rows } = await pool.query(
         `INSERT INTO users (email, password_hash, role)
          VALUES ($1, $2, $3)
-         RETURNING id, email, role`,
+         RETURNING id, email, display_name, role`,
         [email, passwordHash, role],
       );
       const user = rows[0];
       logger.info({ correlationId: req.correlationId, userId: user.id }, "user registered");
-      res.status(201).json({ id: user.id, email: user.email, role: user.role });
+      res.status(201).json({ id: user.id, email: user.email, displayName: user.display_name, role: user.role });
     } catch (err) {
       if (isUniqueViolation(err)) {
         res.status(409).json({ error: "an account with this email already exists" });
@@ -97,11 +166,11 @@ export function authRouter(pool: Pool): Router {
 
     try {
       const { rows } = await pool.query(
-        "SELECT id, email, password_hash, role FROM users WHERE lower(email) = $1",
+        "SELECT id, email, password_hash, display_name, role FROM users WHERE lower(email) = $1",
         [email],
       );
       const user = rows[0] as
-        | { id: string; email: string; password_hash: string; role: string }
+        | { id: string; email: string; password_hash: string; display_name: string | null; role: string }
         | undefined;
 
       // Always compare against a real bcrypt hash, even when no user was
@@ -117,7 +186,7 @@ export function authRouter(pool: Pool): Router {
       const token = signAccessToken({ sub: user.id, role: user.role });
       res.status(200).json({
         token,
-        user: { id: user.id, email: user.email, role: user.role },
+        user: { id: user.id, email: user.email, displayName: user.display_name, role: user.role },
       });
     } catch (err) {
       logger.error({ correlationId: req.correlationId, err }, "login failed");

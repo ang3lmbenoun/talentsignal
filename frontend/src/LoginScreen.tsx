@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { storeToken, storeRole, storeEmail } from "./auth";
+import { storeToken, storeRole, storeEmail, storeDisplayName } from "./auth";
+import { LoginBackdrop } from "./components/LoginBackdrop";
 
 interface LoginScreenProps {
   onSuccess: (token: string) => void;
@@ -40,6 +41,7 @@ export function LoginScreen({ onSuccess, onSwitchToRegister }: LoginScreenProps)
       storeToken(body.token);
       storeRole(body.user.role);
       storeEmail(body.user.email ?? email);
+      storeDisplayName(body.user.displayName ?? "");
       onSuccess(body.token);
     } catch {
       setError("network error — could not reach the server");
@@ -50,48 +52,65 @@ export function LoginScreen({ onSuccess, onSwitchToRegister }: LoginScreenProps)
 
   return (
     <div className="auth-shell">
-      <section aria-label="login" className="auth-card">
-        <div className="auth-brand">
-          <span className="auth-brand-mark">TS</span>
-          <span className="auth-brand-name">TalentSignal</span>
+      <LoginBackdrop />
+      {/* position + zIndex lift the content above the fixed backdrop canvas */}
+      <div className="auth-layout" style={{ position: "relative", zIndex: 1 }}>
+        <div className="auth-intro">
+          <span className="auth-intro-eyebrow">Staffing demand intelligence</span>
+          <h1>Know which roles need your attention.</h1>
+          <p>
+            TalentSignal turns requisition signals into a clearer view of role difficulty and candidate fit,
+            so your team can decide where to focus and what to review next.
+          </p>
+          <ul className="auth-workflow" aria-label="How TalentSignal helps">
+            <li><span className="auth-workflow-mark" aria-hidden="true">✦</span><div><b>Spot the signals</b><small>See patterns that can point to difficult-to-fill demand.</small></div></li>
+            <li><span className="auth-workflow-mark" aria-hidden="true">◎</span><div><b>Review candidate fit</b><small>Understand matches and gaps from the available evidence.</small></div></li>
+            <li><span className="auth-workflow-mark" aria-hidden="true">↗</span><div><b>Choose the next step</b><small>Your team reviews every recommendation before anything is shared.</small></div></li>
+          </ul>
         </div>
-        <h2>Log in</h2>
-        <p className="auth-subtitle">Sign in to your account</p>
-        <form onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="login-email">Email</label>
-            <br />
-            <input
-              id="login-email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
+        <section aria-label="login" className="auth-card">
+          <div className="auth-brand">
+            <span className="auth-brand-mark">TS</span>
+            <span className="auth-brand-name">TalentSignal</span>
           </div>
-          <div>
-            <label htmlFor="login-password">Password</label>
-            <br />
-            <input
-              id="login-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
-          </div>
-          <button type="submit" disabled={submitting} className="auth-submit">
-            {submitting ? "Logging in..." : "Log in"}
-          </button>
-        </form>
-        {error && <p role="alert">{error}</p>}
-        <p className="auth-switch">
-          No account?{" "}
-          <button type="button" onClick={onSwitchToRegister}>
-            Register
-          </button>
-        </p>
-      </section>
+          <h2>Log in</h2>
+          <p className="auth-subtitle">Sign in to review your hiring signals and candidate fit.</p>
+          <form onSubmit={handleSubmit}>
+            <div>
+              <label htmlFor="login-email">Email</label>
+              <br />
+              <input
+                id="login-email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="login-password">Password</label>
+              <br />
+              <input
+                id="login-password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+            </div>
+            <button type="submit" disabled={submitting} className="auth-submit">
+              {submitting ? "Logging in..." : "Log in"}
+            </button>
+          </form>
+          {error && <p role="alert">{error}</p>}
+          <p className="auth-switch">
+            No account?{" "}
+            <button type="button" onClick={onSwitchToRegister}>
+              Register
+            </button>
+          </p>
+        </section>
+      </div>
     </div>
   );
 }

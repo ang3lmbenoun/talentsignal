@@ -9,6 +9,8 @@ interface FakeOpportunityRow {
   id: string;
   title: string;
   family_key: string | null;
+  required_skills?: string[] | null;
+  required_years?: number | null;
 }
 
 interface FakeCandidateRow {
@@ -20,15 +22,28 @@ interface FakeCandidateRow {
   availability: string | null;
 }
 
+// S-30b: real rows always carry required_skills/required_years (migration
+// 022, NULL until a human edits them via PATCH) -- normalized here so
+// every fixture above doesn't need to repeat `required_skills: null,
+// required_years: null` on every literal object.
+function normalizeOpportunityRow(row: FakeOpportunityRow): Required<FakeOpportunityRow> {
+  return {
+    required_skills: null,
+    required_years: null,
+    ...row,
+  };
+}
+
 function createFakeFitsPool(opportunities: FakeOpportunityRow[], candidates: FakeCandidateRow[]) {
+  const normalized = opportunities.map(normalizeOpportunityRow);
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
-    if (sql.includes("FROM opportunities WHERE id")) {
+    if (sql.includes("FROM opportunities") && sql.includes("WHERE id")) {
       const [id] = params as [string];
-      const row = opportunities.find((o) => o.id === id);
+      const row = normalized.find((o) => o.id === id);
       return { rows: row ? [row] : [] };
     }
-    if (sql.includes("SELECT id, title, family_key FROM opportunities")) {
-      return { rows: opportunities };
+    if (sql.includes("FROM opportunities")) {
+      return { rows: normalized };
     }
     if (sql.includes("FROM candidates")) {
       return { rows: candidates };

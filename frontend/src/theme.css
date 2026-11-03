@@ -89,7 +89,7 @@ body{
 }
 .sidebar.collapsed .sidebar-brand{ padding-left:var(--space-2); padding-right:var(--space-2); }
 .sidebar-brand-mark{
-  color:var(--accent); flex-shrink:0;
+  color:var(--accent); width:27px; height:27px; flex-shrink:0;
 }
 .sidebar-brand-name{
   font-weight:600; font-size:16px; letter-spacing:-.01em;
@@ -107,7 +107,13 @@ body{
 .sidebar-collapse-toggle:hover{ background:var(--bg); color:var(--text); transform:none; }
 .sidebar.collapsed .sidebar-collapse-toggle{ margin-left:0; }
 
-.sidebar-nav{ display:flex; flex-direction:column; gap:2px; }
+.sidebar-nav{ display:flex; flex-direction:column; gap:10px; overflow-y:auto; min-height:0; }
+.sidebar-group{ display:flex; flex-direction:column; gap:3px; }
+.sidebar-group-label{
+  padding:6px 10px 3px; color:var(--mute); font-size:10px; font-weight:700;
+  letter-spacing:.09em; text-transform:uppercase; white-space:nowrap;
+}
+.sidebar.collapsed .sidebar-group-label{ display:none; }
 
 .navbtn{
   position:relative;
@@ -186,10 +192,12 @@ body{
   display:flex; flex-direction:column; gap:2px;
 }
 .topbar-profile-menu-header{
-  display:flex; align-items:center; gap:var(--space-2);
+  display:flex; align-items:flex-start; gap:var(--space-2);
   padding:var(--space-2); color:var(--text);
 }
-.topbar-profile-menu-email{ font-size:13.5px; font-weight:600; word-break:break-all; }
+.topbar-profile-menu-identity{ display:flex; flex-direction:column; gap:3px; min-width:0; }
+.topbar-profile-menu-name{ font-size:13.5px; font-weight:700; color:var(--text); }
+.topbar-profile-menu-email{ font-size:12px; font-weight:500; color:var(--mute); word-break:break-all; }
 .topbar-profile-menu-role{
   font-size:12px; color:var(--mute); padding:0 var(--space-2) var(--space-1);
 }
@@ -203,19 +211,57 @@ body{
 }
 .topbar-profile-menu-item:hover{ background:var(--bg); transform:none; }
 
+.profile-dialog-backdrop{
+  position:fixed; inset:0; z-index:30; display:grid; place-items:center;
+  padding:20px; background:rgba(15,23,42,.46); backdrop-filter:blur(3px);
+}
+.profile-dialog{
+  width:min(100%, 470px); padding:26px; color:var(--text);
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  box-shadow:0 24px 70px rgba(15,23,42,.25);
+}
+.profile-dialog-heading{ display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-bottom:22px; }
+.profile-dialog-eyebrow{ color:var(--accent); font-size:10px; font-weight:800; letter-spacing:.14em; }
+.profile-dialog-heading h2{ margin:6px 0 4px; font-size:22px; line-height:1.2; }
+.profile-dialog-heading p{ margin:0; color:var(--mute); font-size:13.5px; }
+.profile-dialog-close{ display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; padding:0; background:var(--surface-2); color:var(--mute); border:1px solid var(--border); box-shadow:none; }
+.profile-dialog-close:hover{ background:var(--bg); color:var(--text); transform:none; }
+.profile-form{ display:flex; flex-direction:column; gap:8px; }
+.profile-form label{ margin-top:7px; color:var(--text); font-size:13px; font-weight:700; }
+.profile-form input{ width:100%; min-height:43px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; color:var(--text); background:var(--surface); font:inherit; }
+.profile-form input:focus{ outline:3px solid color-mix(in srgb, var(--accent) 22%, transparent); border-color:var(--accent); }
+.profile-form-note{ margin:6px 0 2px; padding:10px 12px; color:var(--mute); background:var(--surface-2); border-radius:8px; font-size:12px; line-height:1.5; }
+.profile-form-message{ display:flex; align-items:flex-start; gap:7px; margin:2px 0; font-size:13px; line-height:1.45; }
+.profile-form-message.error{ color:var(--danger); }
+.profile-form-message.success{ color:var(--success); }
+.profile-dialog-loading{ color:var(--mute); }
+.profile-form-actions{ display:flex; justify-content:flex-end; gap:9px; padding-top:12px; }
+.profile-form-actions button{ display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:39px; margin:0; padding:8px 14px; border-radius:8px; font-size:13px; }
+.profile-cancel-button{ color:var(--text); background:var(--surface); border:1px solid var(--border); box-shadow:none; }
+.profile-cancel-button:hover{ background:var(--surface-2); transform:none; }
+.profile-save-button{ color:#fff; background:var(--accent); border:1px solid var(--accent); }
+.profile-save-button:hover{ background:var(--accent-hover); transform:none; }
+.profile-form-actions button:disabled,.profile-dialog-close:disabled{ opacity:.6; cursor:not-allowed; }
+@media(max-width:600px){
+  .profile-dialog{ padding:21px; }
+  .profile-dialog-backdrop{ padding:12px; }
+  .topbar-email{ max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+}
+
 .content{ padding:var(--space-5); max-width:1200px; width:100%; }
 
 /* ---- backend health: slim status pill, not a big card ---- */
-section[aria-label="backend health"]{
+section[aria-label="workspace status"]{
   display:inline-flex; align-items:center; gap:.5em;
   background:var(--bg); border:1px solid var(--border);
   border-radius:999px; padding:.3em .95em; margin:0;
   font-size:12.5px; color:var(--mute);
 }
-section[aria-label="backend health"] p{ margin:0; }
-section[aria-label="backend health"] p::before{
-  content:"●"; color:var(--success); margin-right:.5em; font-size:1.1em; vertical-align:-1px;
-}
+section[aria-label="workspace status"] p{ margin:0; }
+.workspace-status-ready::before,.workspace-status-error::before,.workspace-status-loading::before{ content:"●"; margin-right:.5em; font-size:1.1em; vertical-align:-1px; }
+.workspace-status-ready::before{ color:var(--success); }
+.workspace-status-error::before{ color:var(--danger); }
+.workspace-status-loading::before{ color:var(--warning); }
 
 /* pre-login: same health pill, parked as a small corner badge so it
    doesn't clutter the branded auth card */
@@ -326,7 +372,28 @@ hr{ border:none; border-top:1px solid var(--border); margin:1.1rem 0; }
 /* ---- auth screens (login/register): centered branded card ---- */
 .auth-shell{
   min-height:100vh; display:flex; align-items:center; justify-content:center;
-  background:var(--bg); padding:var(--space-5);
+  background:radial-gradient(ellipse at 18% 20%, var(--accent-soft), transparent 42%), var(--bg);
+  padding:clamp(20px,5vw,64px);
+}
+.auth-layout{ display:grid; grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr); align-items:center; gap:clamp(36px,7vw,96px); width:min(100%,1040px); }
+.auth-intro{ max-width:560px; }
+.auth-intro-eyebrow{ color:var(--accent); font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
+.auth-intro h1{ max-width:520px; margin:12px 0; font-size:clamp(34px,5vw,54px); line-height:1.06; letter-spacing:-.045em; }
+.auth-intro > p{ max-width:520px; margin:0; color:var(--mute); font-size:16px; line-height:1.7; }
+.auth-workflow{ display:grid; gap:16px; margin:28px 0 0; padding:0; list-style:none; }
+.auth-workflow li{ display:flex; align-items:flex-start; gap:13px; }
+.auth-workflow-mark{ display:grid; place-items:center; flex:0 0 34px; width:34px; height:34px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--accent); font-size:17px; }
+.auth-workflow li div{ display:grid; gap:2px; padding-top:1px; }
+.auth-workflow b{ font-size:14px; }
+.auth-workflow small{ font-size:13px; line-height:1.45; }
+.auth-card{ max-width:none; }
+@media (max-width:760px){
+  .auth-shell{ align-items:flex-start; padding:28px 20px; }
+  .auth-layout{ grid-template-columns:1fr; gap:24px; max-width:480px; margin:auto; }
+  .auth-intro h1{ font-size:clamp(30px,9vw,42px); }
+  .auth-intro > p{ font-size:14px; }
+  .auth-workflow{ gap:11px; margin-top:18px; }
+  .auth-workflow small{ font-size:12px; }
 }
 .auth-card{
   width:100%; max-width:400px;
@@ -367,6 +434,46 @@ hr{ border:none; border-top:1px solid var(--border); margin:1.1rem 0; }
   flex-shrink:0;
 }
 .overview-run-ingestion:disabled{ opacity:.55; cursor:not-allowed; }
+
+/* First-visit orientation: explains the staffing workflow in product
+   language and gives each role a direct route into its permitted screens. */
+.overview-start{
+  margin:0 0 var(--space-5); padding:clamp(18px,2.5vw,28px);
+  border:1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius:14px; background:linear-gradient(125deg, var(--accent-soft), var(--surface) 62%);
+  box-shadow:var(--shadow);
+}
+.overview-start-copy{ max-width:760px; }
+.overview-start-eyebrow{
+  display:inline-flex; align-items:center; gap:7px; color:var(--accent);
+  font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+}
+.overview-start-eyebrow::before{ content:""; width:7px; height:7px; border-radius:50%; background:var(--accent); }
+.overview-start-copy h2{ margin:8px 0 7px; font-size:clamp(20px,2vw,27px); line-height:1.2; letter-spacing:-.035em; }
+.overview-start-copy p{ max-width:720px; margin:0; color:var(--mute); font-size:14px; line-height:1.65; }
+.overview-start-steps{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:20px; }
+.overview-start-step{
+  display:flex; flex-direction:column; min-width:0; padding:13px;
+  border:1px solid var(--border); border-radius:10px; background:var(--surface);
+  transition:border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+.overview-start-step:hover{ border-color:var(--accent); transform:translateY(-2px); box-shadow:var(--shadow-hover); }
+.overview-start-step-top{ display:flex; justify-content:space-between; align-items:center; color:var(--accent); }
+.overview-start-step-marker{ width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 4px var(--accent-soft); }
+.overview-start-step h3{ margin:11px 0 3px; font-size:13px; }
+.overview-start-step p{ min-height:38px; margin:0; color:var(--mute); font-size:12px; line-height:1.5; }
+.overview-start-link{
+  display:inline-flex; align-items:center; gap:5px; width:max-content; margin:10px 0 0; padding:0;
+  border:0; background:transparent; box-shadow:none; color:var(--accent); font-size:12px; font-weight:700;
+}
+.overview-start-link:hover{ color:var(--accent-hover); transform:none; box-shadow:none; text-decoration:underline; }
+.overview-start-footnote{ margin:12px 0 0; color:var(--mute); font-size:11px; }
+@media (max-width:1050px){ .overview-start-steps{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:560px){
+  .overview-start{ padding:16px; }
+  .overview-start-steps{ grid-template-columns:1fr; gap:8px; }
+  .overview-start-step p{ min-height:0; }
+}
 
 /* ---- overview: stat tiles ---- */
 .stat-grid{
@@ -441,26 +548,34 @@ hr{ border:none; border-top:1px solid var(--border); margin:1.1rem 0; }
   display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
   gap:var(--space-4); margin-bottom:var(--space-3);
 }
+/* Redesign per talentsignal-redesign.html's metric-card: label + icon badge
+   share a top row (icon top-RIGHT, not stacked above the value), the big
+   value sits below, and the sparkline is a small decorative squiggle tucked
+   into the card's empty bottom-right corner rather than a full-width
+   in-flow line -- matches the reference screenshots exactly instead of the
+   earlier approximation. */
 .kpi-tile{
-  display:flex; flex-direction:column;
+  position:relative; display:flex; flex-direction:column; overflow:hidden;
   background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
   box-shadow:var(--shadow), var(--tile-inset-top); padding:var(--space-4);
   transition:box-shadow 200ms ease;
 }
 .kpi-tile:hover{ box-shadow:var(--shadow-hover), var(--tile-inset-top); }
+.kpi-tile-top{ display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); }
 .kpi-tile-icon{
   display:flex; align-items:center; justify-content:center;
-  width:34px; height:34px; border-radius:9px; color:#fff; flex-shrink:0;
-  margin-bottom:var(--space-2);
+  width:30px; height:30px; border-radius:8px; color:var(--accent); flex-shrink:0;
+  background:var(--accent-soft);
 }
-.kpi-tile-value{ font-size:30px; font-weight:700; letter-spacing:-.01em; line-height:1.1; }
-.kpi-tile-label{ font-size:12.5px; color:var(--mute); margin-top:4px; }
-.kpi-tile-sparkline{ width:100%; height:24px; margin-top:var(--space-3); }
-.kpi-tile-caption{ font-size:10.5px; color:var(--mute); margin:.3em 0 0; }
-.kpi-tile-why{
-  font-size:12px; color:var(--mute); margin:var(--space-2) 0 0;
-  padding-left:.6em; border-left:2px solid var(--accent-soft);
+.kpi-tile-value{ font-size:28px; font-weight:700; letter-spacing:-.01em; line-height:1.15; margin-top:var(--space-2); }
+.kpi-tile-label{ font-size:12.5px; color:var(--mute); }
+.kpi-tile-sparkline{
+  position:absolute; right:12px; bottom:30px; width:56px; height:20px;
+  opacity:.55; pointer-events:none;
 }
+.kpi-tile-caption{ font-size:11px; color:var(--mute); margin:.3em 0 0; position:relative; }
+.kpi-tile-trend{ font-size:11px; color:var(--accent-hover); margin:.4em 0 0; position:relative; }
+.kpi-tile-why{ font-size:11px; color:var(--accent-hover); margin:.2em 0 0; position:relative; }
 
 /* ---- overview: S-29 fit-scoring KPI tiles ---- */
 .kpi-tile-basis-pill{
@@ -510,6 +625,17 @@ hr{ border:none; border-top:1px solid var(--border); margin:1.1rem 0; }
   border-radius:8px; padding:.4em .7em; font-size:13px;
 }
 .caption{ font-size:12px; color:var(--mute); }
+
+/* Generic layout/type utilities from the mock (talentsignal-redesign.html)
+   that several screens (AnalyticsDashboard, HardToFillTargeting) already
+   reference by class name but that never actually had a definition here --
+   scaled to this app's existing 12-13px convention, not the mock's dense
+   8-11px micro-type. */
+.row{ display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; }
+.small{ font-size:12px; color:var(--mute); line-height:1.5; }
+.between{ display:flex; justify-content:space-between; align-items:center; gap:var(--space-2); }
+.hr{ height:1px; background:var(--border); margin:var(--space-3) 0; }
+.section-title{ font-size:13px; font-weight:700; margin:0 0 var(--space-2); }
 
 .client-kpi-strip{
   display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
@@ -625,11 +751,8 @@ hr{ border:none; border-top:1px solid var(--border); margin:1.1rem 0; }
 
 ul.opportunities-grid{
   list-style:none; margin:0; padding:0; display:grid; gap:var(--space-4);
-  grid-template-columns:1fr;
+  grid-template-columns:repeat(auto-fit, minmax(min(100%, 340px), 1fr));
 }
-@media (min-width:640px){ ul.opportunities-grid{ grid-template-columns:repeat(2, 1fr); } }
-@media (min-width:960px){ ul.opportunities-grid{ grid-template-columns:repeat(3, 1fr); } }
-@media (min-width:1280px){ ul.opportunities-grid{ grid-template-columns:repeat(4, 1fr); } }
 
 .opportunity-card{
   position:relative; background:var(--surface); border:1px solid var(--border);
@@ -785,6 +908,46 @@ ul.opportunities-grid{
 }
 .raw-payload-modal-caption{ font-size:11px; color:var(--mute); margin-top:var(--space-3); }
 
+/* S-30b: recommendation panel below "How this was scored" -- surfaces
+   S-30a's backend recommendation (loosen_years/loosen_skills/add_candidates/
+   no_action) with a real, editable action where one exists ("Edit JD"),
+   never a decorative suggestion with nothing behind it. */
+.recommendation-panel{ margin-top:var(--space-2); }
+.recommendation-box{
+  display:flex; align-items:flex-start; justify-content:space-between; gap:var(--space-3);
+  padding:var(--space-3) var(--space-4); border-radius:8px; font-size:13px; line-height:1.5;
+}
+.recommendation-box p{ margin:0; flex:1; }
+.recommendation-box--loosen_years,
+.recommendation-box--loosen_skills{
+  background:var(--accent-soft); color:var(--accent-hover);
+}
+.recommendation-box--add_candidates{
+  background:var(--surface-2); color:var(--text); box-shadow:inset 0 0 0 1px var(--border);
+}
+.recommendation-action{
+  flex-shrink:0; white-space:nowrap; height:30px; padding:0 .9em; border-radius:8px;
+  font-size:12px; font-weight:700; background:var(--accent); color:#fff;
+}
+.recommendation-action:disabled{ background:var(--border); color:var(--mute); cursor:not-allowed; }
+.recommendation-pill{
+  display:inline-flex; align-items:center; gap:.4em; height:28px; padding:0 .8em;
+  border-radius:999px; font-size:12px; font-weight:700; background:var(--success); color:#fff;
+}
+.recommendation-loading,
+.recommendation-error{ font-size:12px; color:var(--mute); margin:0; }
+
+/* S-30b: inline JD editor modal, reuses the raw-payload modal's
+   overlay/panel shell (.raw-payload-modal / .raw-payload-modal-panel) so
+   there's one modal visual language on this screen, not two. */
+.jd-editor-panel{ max-width:480px; }
+.jd-editor-field{ display:block; margin:var(--space-3) 0; font-size:12px; font-weight:600; color:var(--mute); }
+.jd-editor-field span{ display:block; margin-bottom:4px; }
+.jd-editor-field input{ width:100%; }
+.jd-editor-hint{ font-size:11px; color:var(--mute); margin:2px 0 0; font-weight:400; }
+.jd-editor-error{ font-size:12px; color:var(--danger); margin:var(--space-2) 0 0; }
+.jd-editor-actions{ display:flex; justify-content:flex-end; gap:var(--space-2); margin-top:var(--space-3); }
+
 .opportunities-load-more{ margin-top:var(--space-2); }
 
 /* ---- resume upload drop zone (S-26 fix2, visual stub) ---- */
@@ -928,13 +1091,17 @@ ul.opportunities-grid{
 }
 .signals-panel h3{ margin-top:0; }
 .signals-panel-caption{ font-size:11px; color:var(--mute); margin-top:0; }
-
-.donut-svg-sm{ width:110px; height:110px; flex-shrink:0; }
-
-.signals-family-legend{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--space-2); flex:1; min-width:120px; }
-.signals-family-legend li{ display:flex; align-items:center; gap:var(--space-2); font-size:13px; margin:0; }
-.signals-family-swatch{ width:10px; height:10px; border-radius:3px; flex-shrink:0; }
-.signals-family-pct{ margin-left:auto; color:var(--mute); }
+.signals-family-bars{ display:flex; flex-direction:column; gap:13px; margin-top:var(--space-4); }
+.signals-family-bar-label,.overview-tier-heading,.overview-basis-heading{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; font-size:12px; }
+.signals-family-bar-label span,.overview-tier-heading b,.overview-basis-heading b{ font-weight:650; }
+.signals-family-bar-label b,.overview-tier-heading strong,.overview-basis-heading strong{ white-space:nowrap; font-size:12px; }
+.signals-family-bar-label small,.overview-tier-heading small,.overview-basis-heading small{ color:var(--mute); font-size:10px; font-weight:500; }
+.signals-family-bar-track,.overview-tier-track,.overview-basis-track{ height:9px; overflow:hidden; background:var(--surface-2); border-radius:999px; margin-top:5px; }
+.signals-family-bar-track i,.overview-tier-track i,.overview-basis-track i{ display:block; height:100%; min-width:0; border-radius:inherit; }
+.overview-tier-list,.overview-basis-list{ display:flex; flex-direction:column; gap:13px; }
+.overview-tier-row>span,.overview-basis-row>span{ display:block; margin-top:4px; color:var(--mute); font-size:11px; line-height:1.45; }
+.targeting-reason-list{ margin:7px 0 0; padding-left:18px; }
+.targeting-reason-list li{ margin:0 0 5px; }
 
 .signal-source-row{
   display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);
@@ -1023,12 +1190,163 @@ ul.opportunities-grid{
 .analytics-gauge{ width:72px; height:72px; }
 .analytics-combo-chart{ width:100%; height:auto; margin-top:var(--space-2); }
 .analytics-client-bars{ display:flex; flex-direction:column; gap:8px; margin-top:var(--space-2); }
+/* S-25 redesign refresh: pairs related cards side by side, matching the
+   mock's 2-col rhythm (combo chart + forecast; client contribution +
+   segments), instead of every section stacking full-width. */
+.analytics-grid-2{ display:grid; gap:var(--space-4); margin-bottom:var(--space-3); }
+@media (min-width:880px){ .analytics-grid-2{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
+
+/* S-25 redesign: narrowing funnel bars for the Demand forecast card, per
+   talentsignal-redesign.html. Each bar's own width is the real signal
+   (widest = most opportunities still in that stage), not a fixed/decorative
+   taper. */
+.analytics-funnel{ display:grid; justify-items:center; gap:6px; margin-top:var(--space-2); }
+.analytics-funnel-bar{
+  height:30px; display:flex; align-items:center; justify-content:center;
+  border-radius:7px; color:#fff; font-size:12px; font-weight:600; text-align:center;
+  background:var(--accent); padding:0 var(--space-2);
+}
+.analytics-funnel-bar:nth-child(2){ background:color-mix(in srgb, var(--accent) 80%, #fff); }
+.analytics-funnel-bar:nth-child(3){ background:color-mix(in srgb, var(--accent) 60%, #fff); }
+.analytics-funnel-bar:nth-child(4){ background:color-mix(in srgb, var(--accent) 40%, #fff); color:var(--accent-hover); }
 
 /* Generic labeled-bar row (reused by the client contribution panel) and its
    fill track, same visual language as the basis-distribution bars elsewhere. */
 .dist{ display:grid; grid-template-columns:120px 1fr 34px; gap:8px; align-items:center; font-size:12px; }
 .barline{ height:7px; border-radius:9px; background:var(--surface-2); overflow:hidden; }
 .barline i{ display:block; height:100%; background:var(--accent); border-radius:9px; }
+
+/* ---- Targeting screen (HardToFillTargeting.tsx) ---- */
+.targeting-role-list{ display:flex; flex-direction:column; gap:var(--space-4); }
+.targeting-intro{ margin:0 0 var(--space-3); }
+.targeting-intro h2{ margin:0 0 6px; }
+.targeting-intro p{ max-width:760px; margin:0; color:var(--mute); line-height:1.55; }
+.targeting-data-note{
+  margin:0 0 var(--space-3); padding:10px 12px; border:1px solid var(--border);
+  border-radius:8px; background:var(--surface); color:var(--mute); font-size:12px;
+}
+.targeting-empty-state{
+  margin:var(--space-2) 0 0; padding:14px; border:1px dashed var(--border);
+  border-radius:8px; color:var(--mute); background:var(--surface-2);
+}
+.targeting-role-card{ display:flex; flex-direction:column; }
+.targeting-candidate{
+  background:var(--surface-2); border:1px solid var(--border); border-radius:8px;
+  padding:var(--space-2) var(--space-3);
+}
+.targeting-candidate-fit{ font-size:12px; font-weight:700; color:var(--accent); }
+
+/* Per-cluster collapsible bars -- each <details class="cluster"> shows a
+   label, a real proportional barline, and a count in one summary row. */
+.target-bars{ display:flex; flex-direction:column; gap:7px; margin-top:var(--space-2); }
+.cluster{ border:1px solid var(--border); border-radius:8px; background:var(--surface); padding:var(--space-2) var(--space-3); transition:border-color 150ms ease, box-shadow 150ms ease; }
+.cluster:hover, .cluster:focus-within{ border-color:var(--accent); box-shadow:0 2px 8px color-mix(in srgb, var(--accent) 12%, transparent); }
+.cluster > summary{
+  display:grid; grid-template-columns:minmax(115px, auto) minmax(60px, 1fr) 48px auto;
+  gap:var(--space-2); align-items:center; cursor:pointer; list-style:none; min-height:32px;
+}
+.cluster > summary::-webkit-details-marker{ display:none; }
+.cluster-label{ font-size:12.5px; font-weight:600; }
+.cluster-action{ color:var(--accent); font-size:11px; font-weight:600; white-space:nowrap; }
+.cluster[open] .cluster-action{ color:var(--mute); }
+.cluster .barline{ height:10px; }
+.cluster .barline i{ background:linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #8b9cff)); }
+.cluster-list{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+  gap:var(--space-2); margin-top:var(--space-3);
+}
+
+/* Clear hierarchy and compact, keyboard-friendly review controls. */
+.screen-intro{ margin:0 0 var(--space-4); padding:0 0 var(--space-3); border-bottom:1px solid var(--border); }
+.screen-intro-kicker{ display:block; color:var(--accent); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.screen-intro h2{ margin:3px 0 5px; }
+.screen-intro p,.screen-description{ max-width:780px; color:var(--mute); margin:0; line-height:1.6; }
+.workflow-empty-note{ padding:12px 14px; border:1px solid var(--border); border-left:3px solid var(--accent); background:var(--surface-2); border-radius:8px; color:var(--mute); }
+.opportunity-kpi-why{ margin:8px 0 0; color:var(--mute); font-size:11.5px; line-height:1.45; }
+.opportunity-kpi-context{ margin:3px 0 0; color:var(--mute); font:11px "IBM Plex Mono",ui-monospace,monospace; }
+.opportunity-method-note,.opportunity-source-caution{ display:grid; gap:6px; margin:12px 0; padding:12px 14px; border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:9px; background:var(--accent-soft); font-size:12px; line-height:1.5; }
+.opportunity-method-note>b,.opportunity-source-caution>b{ font-size:13px; }
+.opportunity-source-caution{ border-left-color:var(--warning); background:color-mix(in srgb,var(--warning) 8%,var(--surface)); }
+.select:focus-visible{ outline:3px solid color-mix(in srgb, var(--accent) 28%, transparent); outline-offset:1px; }
+.opportunity-search{ min-width:210px; }
+.targeting-role-details{ padding:0; overflow:hidden; }
+.targeting-role-summary{ position:relative; display:block; list-style:none; cursor:pointer; padding:var(--space-4); }
+.targeting-role-summary::-webkit-details-marker{ display:none; }
+.targeting-role-summary:focus-visible{ outline:3px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset:-3px; }
+.targeting-expand-label{ display:inline-flex; margin-top:10px; color:var(--accent); font-size:12px; font-weight:700; }
+.targeting-expand-label::after{ content:"＋"; padding-left:6px; }
+.targeting-role-details[open] .targeting-expand-label::after{ content:"−"; }
+.targeting-role-content{ border-top:1px solid var(--border); padding:var(--space-4); }
+.targeting-filters,.candidate-filters{ padding:12px; border-radius:10px; background:var(--surface); border:1px solid var(--border); }
+.targeting-filters .caption,.candidate-filters .caption{ margin-left:auto; }
+.candidate-filters input{ min-width:240px; }
+.candidate-grid{ align-items:stretch; }
+.opportunity-role-title{ margin:3px 0 0; color:var(--text); font-size:14px; font-weight:600; line-height:1.35; }
+.opportunity-score-wrap{ display:grid; grid-template-columns:46px minmax(0,1fr); align-items:center; column-gap:8px; max-width:280px; margin:var(--space-3) 0; }
+.opportunity-score-wrap .opportunity-confidence-ring{ grid-row:span 2; }
+.opportunity-score-wrap>span{ font-size:11px; font-weight:700; color:var(--text); }
+.opportunity-score-wrap small{ color:var(--mute); font-size:10px; line-height:1.3; }
+.opportunity-score-explainer{ padding:12px 14px; background:var(--accent-soft); border-radius:9px; border-left:3px solid var(--accent); }
+.opportunity-score-explainer>b{ font-size:13px; }
+.opportunity-score-explainer p{ margin:5px 0 0; font-size:12px; line-height:1.5; }
+.signals-overview{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-3); margin:var(--space-4) 0; }
+.signals-overview-card{ min-width:0; padding:18px; border:1px solid var(--border); border-radius:12px; background:linear-gradient(145deg,var(--surface),var(--surface-2)); }
+.signals-overview-card--accent{ border-color:color-mix(in srgb,var(--accent) 36%,var(--border)); }
+.signals-overview-label{ display:block; font-size:12px; font-weight:700; color:var(--mute); }
+.signals-overview-card strong{ display:block; margin:5px 0; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:26px; letter-spacing:-.03em; }
+.signals-overview-card strong small{ font-family:inherit; font-size:13px; color:var(--mute); letter-spacing:0; }
+.signals-overview-card p{ margin:8px 0 0; color:var(--mute); font-size:12px; line-height:1.5; }
+.signals-overview-track,.signals-bar-track{ height:8px; overflow:hidden; border-radius:99px; background:var(--border); }
+.signals-overview-track i,.signals-bar-track i{ display:block; height:100%; border-radius:inherit; background:var(--accent); }
+.signals-section-heading{ display:flex; justify-content:space-between; align-items:end; gap:var(--space-3); margin:var(--space-5) 0 var(--space-3); }
+.signals-section-heading h3{ margin:0; font-size:16px; }
+.signals-section-heading p{ margin:4px 0 0; color:var(--mute); font-size:12px; }
+.signals-grid--plain{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.signals-grid--plain .signal-card{ position:relative; display:grid; grid-template-columns:1fr auto; gap:8px 12px; padding:16px; border-radius:11px; background:var(--surface); border:1px solid var(--border); }
+.signals-grid--plain .signal-card-name{ align-self:center; font-size:14px; font-weight:700; }
+.signals-grid--plain .signal-card-count{ font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:19px; font-weight:700; }
+.signals-grid--plain .signal-card-count small{ font:500 11px Inter,system-ui,sans-serif; color:var(--mute); }
+.signals-grid--plain .signals-bar-track,.signals-grid--plain .signal-card-why,.signals-grid--plain .signal-card-next{ grid-column:1/-1; }
+.signals-grid--plain .signal-card-why{ color:var(--mute); font-size:12px; }
+.signals-grid--plain .signal-card-next{ padding:9px 10px; background:var(--surface-2); border-radius:7px; color:var(--text); font-size:11px; line-height:1.45; }
+.signals-grid--plain .signal-card-next b{ display:block; margin-bottom:2px; }
+.signals-basis-panel{ margin-top:24px; padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2); }
+.signals-basis-panel .signals-section-heading{ margin:0 0 12px; }
+.signals-basis-grid{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.signals-basis-grid>div{ display:flex; flex-direction:column; gap:4px; padding:13px; border-radius:9px; background:var(--surface); border:1px solid var(--border); }
+.signals-basis-grid b{ font-size:12px; text-transform:capitalize; }
+.signals-basis-grid strong{ font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:24px; }
+.signals-basis-grid span{ color:var(--mute); font-size:11px; line-height:1.45; }
+@media (max-width:900px){
+  .app-shell{ grid-template-columns:200px minmax(0,1fr); }
+  .sidebar{ width:200px; }
+  .content{ padding:var(--space-4); }
+  .opportunity-kpi-strip,.kpi-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:640px){
+  .app-shell,.app-shell.sidebar-collapsed{ grid-template-columns:1fr; }
+  .sidebar,.sidebar.collapsed{ position:sticky; top:0; z-index:8; width:100%; height:auto; padding:8px 12px; border-right:0; border-bottom:1px solid var(--border); }
+  .sidebar-brand{ padding:6px 4px; margin:0; border:0; background:none; }
+  .sidebar-nav{ flex-direction:row; overflow-x:auto; gap:8px; }
+  .sidebar-group{ flex-direction:row; flex-shrink:0; gap:4px; }
+  .sidebar-group-label{ display:none; }
+  .navbtn{ width:auto; white-space:nowrap; padding:.45em .65em; }
+  .navbtn::before{ display:none; }
+  .sidebar-collapse-toggle{ display:none; }
+  .topbar{ padding:.55em 12px; }
+  .content{ padding:12px; }
+  .opportunity-kpi-strip,.kpi-grid{ grid-template-columns:1fr 1fr; }
+  .signals-overview,.signals-grid--plain{ grid-template-columns:1fr; }
+  .signals-basis-grid{ grid-template-columns:1fr; }
+  .cluster > summary{ grid-template-columns:1fr 45px; }
+  .cluster .barline{ grid-column:1; grid-row:2; }
+  .cluster-action{ grid-column:2; grid-row:2; white-space:normal; }
+  .targeting-filters .caption,.candidate-filters .caption{ width:100%; margin-left:0; }
+}
+@media (max-width:620px){
+  .cluster > summary{ grid-template-columns:minmax(95px, auto) minmax(48px, 1fr) 42px; }
+  .cluster-action{ grid-column:1 / -1; }
+}
 
 /* ---- opportunities: company-grouped landing (S-26) ---- */
 .opportunity-company-rows{ list-style:none; margin:0 0 var(--space-4); padding:0; display:flex; flex-direction:column; gap:var(--space-3); }
@@ -1045,6 +1363,11 @@ ul.opportunities-grid{
 .opportunity-company-row-arrow{ color:var(--mute); font-size:18px; align-self:center; }
 
 /* ---- scrollbar ---- */
+.overview-fit-caveat{
+  margin:calc(var(--space-3) * -1) 0 var(--space-4); padding:10px 12px;
+  border-left:3px solid var(--accent); border-radius:0 var(--radius) var(--radius) 0;
+  background:var(--surface); color:var(--mute); font-size:12px; line-height:1.5;
+}
 *::-webkit-scrollbar{ width:11px; height:11px; }
 *::-webkit-scrollbar-track{ background:var(--bg); }
 *::-webkit-scrollbar-thumb{ background:var(--border); border-radius:6px; }

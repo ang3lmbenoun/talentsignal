@@ -121,6 +121,7 @@ export function RecommendationScreen() {
   return (
     <section aria-label="recommendation engine">
       <h2>Candidate Recommendations</h2>
+      <p className="screen-description">Select a job to see ranked candidate suggestions with their matching evidence. Recommendations are advisory; your team decides what to do.</p>
 
       <form onSubmit={handleSubmit} aria-label="get recommendations">
         <label htmlFor="recommend-job">Job opening</label>
@@ -139,6 +140,8 @@ export function RecommendationScreen() {
           {state.status === "loading" ? "Recommending..." : "Get recommendations"}
         </button>
       </form>
+
+      {jobOpenings.length === 0 && <p className="workflow-empty-note">There are no job openings to recommend against yet. Create one in Jobs first.</p>}
 
       {actionError && <p role="alert">{actionError}</p>}
 

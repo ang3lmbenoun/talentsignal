@@ -35,7 +35,7 @@ import { PrivacyRequestScreen } from "./PrivacyRequestScreen";
 import { RoleGate } from "./RoleGate";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
-import { clearStoredToken, getStoredToken, getStoredEmail } from "./auth";
+import { clearStoredToken, getStoredToken, getStoredEmail, storeDisplayName, storeEmail } from "./auth";
 import { getStoredSidebarState, storeSidebarState } from "./sidebarState";
 
 type HealthState =
@@ -81,6 +81,41 @@ export function App() {
     };
   }, []);
 
+  // A cached token can expire while the app is closed. Validate it before
+  // rendering authenticated screens so users land on login instead of seeing
+  // a dashboard full of failed/empty requests. Network errors are left to the
+  // normal workspace status handling; only an explicit 401 ends the session.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+
+    fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (res) => {
+        // A 404 also means the running API is an older build without the
+        // session-profile route; keeping the dashboard open in that case
+        // would leave the user with nonfunctional, misleading empty panels.
+        if (res.status === 401 || res.status === 404) {
+          if (!cancelled) {
+            clearStoredToken();
+            setToken(null);
+            setAuthView("login");
+          }
+          return;
+        }
+        if (!res.ok) return;
+        const body = (await res.json()) as { user?: { email?: string; displayName?: string } };
+        if (!cancelled && body.user) {
+          if (body.user.email) storeEmail(body.user.email);
+          storeDisplayName(body.user.displayName ?? "");
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
   function handleLogout() {
     clearStoredToken();
     setToken(null);
@@ -109,10 +144,10 @@ export function App() {
   }
 
   const healthPill = (
-    <section aria-label="backend health">
-      {health.status === "loading" && <p>Checking backend...</p>}
-      {health.status === "ok" && <p>Backend reachable — db: {health.db}</p>}
-      {health.status === "error" && <p>Backend unreachable</p>}
+    <section aria-label="workspace status">
+      {health.status === "loading" && <p className="workspace-status-loading">Connecting to your workspace…</p>}
+      {health.status === "ok" && <p className="workspace-status-ready">Workspace ready</p>}
+      {health.status === "error" && <p className="workspace-status-error">Some workspace data may be unavailable. Try refreshing.</p>}
     </section>
   );
 
@@ -123,7 +158,19 @@ export function App() {
     // badge rather than inside the card itself.
     return (
       <>
-        <div className="auth-health-badge">{healthPill}</div>
+        {/* On the login view the fixed corner badge collides with the headline on
+            narrow screens, so it is visually hidden there (still in the DOM and
+            readable by assistive tech). Register keeps the normal badge. */}
+        <div
+          className="auth-health-badge"
+          style={
+            authView === "login"
+              ? { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" }
+              : undefined
+          }
+        >
+          {healthPill}
+        </div>
         {authView === "login" ? (
           <LoginScreen onSuccess={setToken} onSwitchToRegister={() => setAuthView("register")} />
         ) : (
@@ -136,32 +183,40 @@ export function App() {
   return (
     <div className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
       <Sidebar collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebarCollapsed}>
-        {/* Each item is role-gated the same way its screen is, so a role
-            only ever sees tabs it is allowed to open. */}
-        <RoleGate allow={["admin", "sales", "recruiter"]}>
-          {navBtn("overview", "Overview", LayoutDashboard)}
+        {/* Each item and its group are role-gated just like the matching screen. */}
+        <div className="sidebar-group">
+          <span className="sidebar-group-label">Workspace</span>
+          <RoleGate allow={["admin", "sales", "recruiter"]}>
+            {navBtn("overview", "Overview", LayoutDashboard)}
+          </RoleGate>
+        </div>
+        <RoleGate allow={["admin", "sales"]}>
+          <div className="sidebar-group">
+            <span className="sidebar-group-label">Demand intelligence</span>
+            {navBtn("opportunities", "Opportunities", Briefcase)}
+            {navBtn("signals", "Signals", Radio)}
+            {navBtn("targeting", "Targeting", Target)}
+            {navBtn("clients", "Clients", Building2)}
+          </div>
         </RoleGate>
-        <RoleGate allow={["admin", "sales"]}>{navBtn("opportunities", "Opportunities", Briefcase)}</RoleGate>
-        <RoleGate allow={["admin", "sales"]}>{navBtn("signals", "Signals", Radio)}</RoleGate>
-        <RoleGate allow={["admin", "sales"]}>{navBtn("targeting", "Targeting", Target)}</RoleGate>
-        {/* S-25: Clients now aggregates GET /api/hidden-demand/opportunities
-            (admin/sales-only on the backend), not the old CRM /api/clients
-            (admin/sales/recruiter) -- narrowed to match, so a recruiter
-            never lands on a screen that can't load. */}
-        <RoleGate allow={["admin", "sales"]}>{navBtn("clients", "Clients", Building2)}</RoleGate>
-        <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("candidates", "Candidates", Users)}</RoleGate>
-        <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("jobs", "Jobs", ClipboardList)}</RoleGate>
-        <RoleGate allow={["admin", "sales"]}>{navBtn("match", "Match", Link2)}</RoleGate>
-        <RoleGate allow={["admin", "sales"]}>{navBtn("pipeline", "Pipeline", Columns3)}</RoleGate>
-        <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("packages", "Packages", Package)}</RoleGate>
-        <RoleGate allow={["admin", "sales", "recruiter"]}>
-          {navBtn("relationships", "Relationships", Handshake)}
-        </RoleGate>
-        <RoleGate allow={["admin", "recruiter"]}>
-          {navBtn("recommendations", "Recommendations", Sparkles)}
-        </RoleGate>
-        <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("analytics", "Analytics", BarChart3)}</RoleGate>
-        <RoleGate allow={["admin", "recruiter"]}>{navBtn("privacy", "Privacy", ShieldCheck)}</RoleGate>
+        <div className="sidebar-group">
+          <span className="sidebar-group-label">Talent</span>
+          <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("candidates", "Candidates", Users)}</RoleGate>
+          <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("jobs", "Jobs", ClipboardList)}</RoleGate>
+          <RoleGate allow={["admin", "sales"]}>{navBtn("match", "Match", Link2)}</RoleGate>
+        </div>
+        <div className="sidebar-group">
+          <span className="sidebar-group-label">Workflow</span>
+          <RoleGate allow={["admin", "sales"]}>{navBtn("pipeline", "Pipeline", Columns3)}</RoleGate>
+          <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("packages", "Packages", Package)}</RoleGate>
+          <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("relationships", "Relationships", Handshake)}</RoleGate>
+          <RoleGate allow={["admin", "recruiter"]}>{navBtn("recommendations", "Recommendations", Sparkles)}</RoleGate>
+        </div>
+        <div className="sidebar-group">
+          <span className="sidebar-group-label">Insights &amp; privacy</span>
+          <RoleGate allow={["admin", "sales", "recruiter"]}>{navBtn("analytics", "Analytics", BarChart3)}</RoleGate>
+          <RoleGate allow={["admin", "recruiter"]}>{navBtn("privacy", "Privacy", ShieldCheck)}</RoleGate>
+        </div>
       </Sidebar>
 
       <div className="app-main">
@@ -172,28 +227,22 @@ export function App() {
               the backend requireRole gate is the real boundary. */}
           <div hidden={view !== "overview"}>
             <RoleGate allow={["admin", "sales", "recruiter"]}>
-              <OverviewScreen />
+              <OverviewScreen onNavigate={setView} />
             </RoleGate>
           </div>
           <div hidden={view !== "opportunities"}>
             <RoleGate allow={["admin", "sales"]}>
-              <section aria-label="opportunities">
-                <h2>Opportunities</h2>
-                <OpportunitiesList />
-              </section>
+              <OpportunitiesList />
             </RoleGate>
           </div>
           <div hidden={view !== "signals"}>
             <RoleGate allow={["admin", "sales"]}>
-              <SignalsScreen />
+              <SignalsScreen onNavigate={setView} />
             </RoleGate>
           </div>
           <div hidden={view !== "targeting"}>
             <RoleGate allow={["admin", "sales"]}>
-              <section aria-label="hard-to-fill targeting">
-                <h2>Hard-to-fill targeting</h2>
-                <HardToFillTargeting />
-              </section>
+              <HardToFillTargeting />
             </RoleGate>
           </div>
           <div hidden={view !== "clients"}>

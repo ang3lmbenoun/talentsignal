@@ -13,6 +13,10 @@ export interface OpportunityRow {
   id: string;
   title: string;
   family_key: string | null;
+  // S-30b (migration 022): a human edit via PATCH /api/opportunities/:id,
+  // or NULL if never edited.
+  required_skills: string[] | null;
+  required_years: number | null;
 }
 
 export interface CandidateRow {
@@ -33,20 +37,31 @@ function parseLimit(raw: unknown): number {
   return Math.min(Math.floor(n), MAX_LIMIT);
 }
 
-// S-28: a real opportunity has no required_skills/required_years column
-// (opportunities and job_openings have no FK between them, decision 015) --
-// requiredSkills is sourced honestly via roleSkillsConfig.ts's
-// requirementsForTitle() bridge (decision 027, already Ali-reviewed for
-// exactly this "opportunity has only a title" gap), the same real mapping
-// HF-3 candidate targeting already uses. requiredYears has no real source
-// anywhere in this schema today, so it's always null here -- fitScore.ts
-// renormalizes its weight away rather than faking a number. See
-// 06_decisions/056.
+// S-28 (updated S-30b): a real opportunity originally had no
+// required_skills/required_years column at all (opportunities and
+// job_openings have no FK between them, decision 015) -- requiredSkills
+// was sourced honestly via roleSkillsConfig.ts's requirementsForTitle()
+// bridge (decision 027), the same real mapping HF-3 candidate targeting
+// already uses, and requiredYears had no real source anywhere, so it was
+// always null.
+//
+// Migration 022 (S-30b, decision 058) added real, human-editable columns
+// for both. A stored value (from PATCH /api/opportunities/:id) is now
+// authoritative -- a human's real edit outranks the title-derived guess.
+// NULL (never edited) still falls back to the original derivation exactly
+// as before, so every opportunity nobody has touched behaves identically
+// to pre-S-30b. An edited-to-empty-array required_skills ('{}', not NULL)
+// is trusted as a real "no skills required" and does NOT fall back --
+// decision 058 explains why NULL and [] are different states.
 export function toFitOpportunityInput(row: OpportunityRow): FitOpportunityInput {
-  const { requirements } = requirementsForTitle(row.title);
+  // ?? (not a strict !== null check) deliberately treats a real Postgres
+  // NULL and a defensive-coding `undefined` the same way -- both mean
+  // "never edited" -- while still preserving a genuine edited-to-[] value,
+  // since ?? only falls through on null/undefined, never on an empty array.
+  const requiredSkills = row.required_skills ?? requirementsForTitle(row.title).requirements;
   return {
-    requiredSkills: requirements,
-    requiredYears: null,
+    requiredSkills,
+    requiredYears: row.required_years ?? null,
     roleFamily: row.family_key ?? classifyFamily(row.title),
   };
 }
@@ -82,7 +97,7 @@ export function fitsRouter(pool: Pool): Router {
 
     try {
       const oppResult = await pool.query(
-        "SELECT id, title, family_key FROM opportunities WHERE id = $1",
+        "SELECT id, title, family_key, required_skills, required_years FROM opportunities WHERE id = $1",
         [opportunityId],
       );
       if (oppResult.rows.length === 0) {
@@ -130,7 +145,7 @@ export function fitsRouter(pool: Pool): Router {
   router.get("/fits/summary", requireAuth, requireRole(["admin", "sales"]), async (req, res) => {
     try {
       const [opportunitiesResult, candidatesResult] = await Promise.all([
-        pool.query("SELECT id, title, family_key FROM opportunities"),
+        pool.query("SELECT id, title, family_key, required_skills, required_years FROM opportunities"),
         pool.query("SELECT id, name, skills, experience, role_family, availability FROM candidates"),
       ]);
       const opportunityRows = opportunitiesResult.rows as OpportunityRow[];
