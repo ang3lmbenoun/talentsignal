@@ -1,0 +1,24 @@
+/* ---- Explainers: InfoPopover + card explainer bits (new section) --------
+   Reads existing theme.css tokens only. */
+.info-popover{ margin-top:var(--space-2); }
+.info-popover-trigger{
+  display:inline-flex; align-items:center; gap:5px; padding:0; font:inherit; font-size:12px; font-weight:600;
+  color:var(--accent); background:none; border:0; cursor:pointer;
+}
+.info-popover-trigger:hover{ text-decoration:underline; }
+.info-popover-trigger:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+.info-popover-panel{ margin-top:var(--space-2); padding:var(--space-2) var(--space-3); font-size:12px; line-height:1.5; color:var(--text); background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); }
+
+/* Opportunity card: verdict sentence, evidence chip, "what would change this" */
+.card-verdict{ margin:var(--space-3) 0; font-size:15px; font-weight:600; line-height:1.45; color:var(--text); }
+.card-source-note{ margin:var(--space-2) 0; padding:var(--space-2) var(--space-3); font-size:12px; line-height:1.5; color:var(--text); background:var(--surface-2); border:1px solid var(--warning); border-radius:var(--radius); }
+.card-evidence-chip{ font:inherit; cursor:pointer; }
+.card-evidence-chip:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.card-evidence-definition{ margin:var(--space-2) 0; font-size:12px; line-height:1.5; color:var(--mute); }
+.card-what-changes{ margin:var(--space-2) 0; font-size:12px; line-height:1.5; color:var(--mute); }
+.card-what-changes b{ color:var(--text); }
+
+/* KPI tile empty state (Overview) */
+.kpi-empty{ margin:var(--space-2) 0; }
+.kpi-empty strong{ display:block; font-size:15px; }
+.kpi-empty p{ margin:var(--space-1) 0 0; font-size:12px; color:var(--mute); }

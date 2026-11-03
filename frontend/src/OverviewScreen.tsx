@@ -9,6 +9,7 @@ import {
 } from "./lib/basisDerivation";
 import { summarizeStoredBasis, BASIS_AS_STORED_TOOLTIP } from "./lib/storedBasis";
 import { ShowTheMath } from "./components/ShowTheMath";
+import { InfoPopover } from "./components/InfoPopover";
 
 interface Opportunity extends BasisOpportunity {
   company: string;
@@ -147,11 +148,17 @@ function KpiTile({
   error,
   basisPill,
   children,
+  howCounted,
+  emptyState,
 }: {
   icon: LucideIcon;
   value: string;
   label: string;
   why: string;
+  // Plain-language "How is this counted?" text (static; no new numbers).
+  howCounted?: string;
+  // Replaces the big number when there is nothing to count yet.
+  emptyState?: React.ReactNode;
   // The real "n=..." disclosure line under the value -- what this count is
   // actually grounded in, same spirit as basisPill below but shown on
   // every tile, not just the ones with partial coverage.
@@ -172,12 +179,13 @@ function KpiTile({
           <Icon size={16} aria-hidden="true" />
         </span>
       </div>
-      <span className="kpi-tile-value mono">{value}</span>
+      {emptyState ?? <span className="kpi-tile-value mono">{value}</span>}
       {error && <span className="stat-tile-error">Could not load</span>}
       {children}
       {basisPill && <span className="kpi-tile-basis-pill">{basisPill}</span>}
       {caption && <p className="kpi-tile-caption">{caption}</p>}
       <p className="kpi-tile-why">Why it matters: {why}</p>
+      {howCounted && <InfoPopover>{howCounted}</InfoPopover>}
     </div>
   );
 }
@@ -661,6 +669,7 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
               icon={Flame}
               value={hardToFillCount.status === "ok" ? String(hardToFillCount.count) : tileValue(hardToFillCount)}
               label="Hard-to-fill"
+              howCounted="Counts loaded postings whose difficulty signal reaches the app's hard-to-fill cut-off. Open a posting card to see exactly how it was scored."
               why="where your agency's revenue is hiding"
               error={hardToFillCount.status === "error" || opportunitiesCount.status === "error"}
             />
@@ -668,6 +677,7 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
               icon={Radar}
               value={opportunitiesState.status === "ok" ? String(signalCounts.total) : loadingValue(opportunitiesState.status)}
               label="Clues found"
+              howCounted="Adds up four kinds of clue across all loaded postings: reposted, open a long time, open a very long time, and no salary listed. One posting can have several clues, so this can be higher than the number of postings."
               why="reposted, long-open, very long-open and no-salary clues; one posting can have several, so this can be higher than the number of postings"
               error={opportunitiesState.status === "error"}
             />
@@ -675,6 +685,15 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
               icon={Building2}
               value={tileValue(clients)}
               label="Client records (CRM)"
+              howCounted="Counts the clients your team has added to the CRM. It does not count the company names that appear in job postings; those are on the Clients screen."
+              emptyState={
+                clients.status === "ok" && clients.count === 0 ? (
+                  <div className="kpi-empty">
+                    <strong>No client records yet</strong>
+                    <p>Clients your team adds to the CRM will be counted here.</p>
+                  </div>
+                ) : undefined
+              }
               why="client records your team has added; separate from the companies named in job postings"
               error={clients.status === "error"}
             />
@@ -682,6 +701,7 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
               icon={Users}
               value={tileValue(candidates)}
               label="Candidates"
+              howCounted="Counts every profile in the candidate pool, including any demo (fixture) profiles. Demo profiles are labelled under the number when there are any."
               why="profiles in your candidate pool"
               caption={
                 candidates.status === "ok" && candidates.demoCount
@@ -701,6 +721,7 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
                     : `${Math.round(fitsSummaryState.summary.avgFitScore * 100)}%`
                 }
                 label="Average best-candidate match"
+                howCounted="For each posting with measured candidate data, the app takes its single best candidate's skill-overlap score, then averages those scores. It measures skill overlap, not the chance of a hire."
                 why={`across ${fitsSummaryState.summary.measuredCount} reqs · ${fitsSummaryState.summary.totalCandidates} candidates`}
               />
             )}
@@ -709,6 +730,7 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
                 icon={Target}
                 value={loadingValue(fitsSummaryState.status)}
                 label="Average best-candidate match"
+                howCounted="For each posting with measured candidate data, the app takes its single best candidate's skill-overlap score, then averages those scores. It measures skill overlap, not the chance of a hire."
                 why="across reqs with measured fit data"
                 error={fitsSummaryState.status === "error"}
               />
@@ -719,6 +741,7 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
                 icon={Target}
                 value={String(fitsSummaryState.summary.distribution.ge85)}
                 label="Reqs with strong candidates (≥85%)"
+                howCounted="Counts postings whose best candidate shares 85% or more of the skills the role needs. Postings without enough candidate data are not counted."
                 why="potentially strong fit; review evidence first"
               />
             )}
@@ -727,6 +750,7 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
                 icon={Target}
                 value={loadingValue(fitsSummaryState.status)}
                 label="Reqs with strong candidates (≥85%)"
+                howCounted="Counts postings whose best candidate shares 85% or more of the skills the role needs. Postings without enough candidate data are not counted."
                 why="potentially strong fit; review evidence first"
                 error={fitsSummaryState.status === "error"}
               />
@@ -739,6 +763,7 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
                   fitsSummaryState.summary.distribution.b60_69 + fitsSummaryState.summary.distribution.lt60,
                 )}
                 label="Reqs with best match below 70%"
+                howCounted="Counts postings whose best candidate shares less than 70% of the skills the role needs. Postings without enough candidate data are not counted here."
                 why="review fit gaps and the available evidence"
               />
             )}
@@ -747,6 +772,7 @@ export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => v
                 icon={AlertTriangle}
                 value={loadingValue(fitsSummaryState.status)}
                 label="Reqs with best match below 70%"
+                howCounted="Counts postings whose best candidate shares less than 70% of the skills the role needs. Postings without enough candidate data are not counted here."
                 why="review fit gaps and the available evidence"
                 error={fitsSummaryState.status === "error"}
               />
