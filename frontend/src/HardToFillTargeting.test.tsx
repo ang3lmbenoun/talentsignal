@@ -57,10 +57,10 @@ describe("HardToFillTargeting", () => {
     render(<HardToFillTargeting />);
 
     await waitFor(() => expect(screen.getByText("Senior Data Analyst")).toBeInTheDocument());
-    const card = screen.getByText("Senior Data Analyst").closest("article");
+    const card = screen.getByText("Senior Data Analyst").closest("details");
     expect(card).toHaveTextContent("Insight Analytics");
-    expect(card).toHaveTextContent("100% hard to fill");
-    expect(card).toHaveTextContent("in-demand role type");
+    expect(card).toHaveTextContent("100% role-difficulty signal");
+    expect(card).toHaveTextContent("In demand role type");
     expect(card).toHaveTextContent("Needs:");
     // Students appear with their fit and the real matched skills — never bare.
     expect(card).toHaveTextContent("Strong Match");
@@ -86,7 +86,7 @@ describe("HardToFillTargeting", () => {
     render(<HardToFillTargeting />);
 
     await waitFor(() => expect(screen.getByText("Senior Data Analyst")).toBeInTheDocument());
-    expect(screen.getByText(/a human decides who to submit/i)).toBeInTheDocument();
+    expect(screen.getByText(/nothing is submitted automatically/i)).toBeInTheDocument();
     // There is deliberately no button that could submit a student.
     expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();

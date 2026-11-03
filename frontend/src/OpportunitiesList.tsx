@@ -683,10 +683,93 @@ function OpportunityCard({
           </span>
         </div>
 
+        {/* Restored after the redesign dropped it: the S-04/HF-2 trust-scenario
+            strings (rank, confidence %, joined reasons, source, hard-to-fill
+            reason) so a score is never shown without its why. */}
+        <p className="opportunity-legacy-summary">
+          <span>#{rank}</span> <span>{confidencePct}% confidence</span>
+          {" — "}
+          <span>{opportunity.reasons.join(", ")}</span>
+          {" · "}
+          <span>source: {opportunity.source}</span>
+          {opportunity.hardToFill && opportunity.hardToFillReasons && opportunity.hardToFillReasons.length > 0 && (
+            <>
+              {" · "}
+              <span aria-label="hard to fill">
+                🔴 hard to fill: {opportunity.hardToFillReasons.join(", ")}
+              </span>
+            </>
+          )}
+        </p>
+
+        {/* S-24 (Fix 3): open by default, not a <details> collapse -- Ali's
+            "where does the signal come from" complaint was that provenance
+            was invisible without leaving the screen. Restored verbatim. */}
+        <div className="how-scored" aria-label="how this was scored">
+          <h4>How this was scored</h4>
+          <p>Source: {opportunity.source}</p>
+          {opportunity.familyKey && <p>Role family: {opportunity.familyKey}</p>}
+          {(() => {
+            const roleScarcity = roleScarcityFactor(opportunity);
+            if (!roleScarcity?.basis || roleScarcity.basis === "n/a") return null;
+            return <p>Hard-to-fill basis: {roleScarcity.basis}</p>;
+          })()}
+          <p>{opportunity.reasons.join(", ")}</p>
+          {opportunity.hardToFill && opportunity.hardToFillReasons && opportunity.hardToFillReasons.length > 0 && (
+            <p>🔴 {opportunity.hardToFillReasons.join(", ")}</p>
+          )}
+          {opportunity.hardToFillReasons
+            ?.filter((r) => r.startsWith("capacity:"))
+            .map((r) => (
+              <p key={r}>{r}</p>
+            ))}
+        </div>
+
         {/* S-30b: the actionable follow-up to "How this was scored" --
             S-30a's recommendation (loosen the JD, add candidates, or ready
             to send), with a real editing path where one exists. */}
         <RecommendationPanel opportunity={opportunity} />
+
+        {/* S-07 trust scenario: a manager inspecting a score sees the
+            weighted factors behind it, never a bare number. Native
+            <details> keeps it collapsed by default with no extra state. */}
+        <details>
+          <summary>
+            Why this score{opportunity.weightsVersion ? ` (weights ${opportunity.weightsVersion})` : ""}
+          </summary>
+          {opportunity.factors && opportunity.factors.length > 0 ? (
+            <ul>
+              {opportunity.factors.map((f) => (
+                <li key={f.factor}>
+                  {f.factor}: weight {f.weight}, value {f.value}, contributes {f.contribution}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No factor breakdown recorded (scored before S-07).</p>
+          )}
+        </details>
+
+        {/* HF-1 transparency carried through HF-2: each indicator's weight,
+            value, and contribution behind the hard-to-fill flag. */}
+        {opportunity.hardToFill &&
+          opportunity.hardToFillFactors &&
+          opportunity.hardToFillFactors.length > 0 && (
+            <details>
+              <summary>
+                Why hard to fill
+                {opportunity.hardToFillVersion ? ` (weights ${opportunity.hardToFillVersion})` : ""}
+              </summary>
+              <ul>
+                {opportunity.hardToFillFactors.map((f) => (
+                  <li key={f.factor}>
+                    {f.factor}: weight {f.weight}, value {f.value}, contributes {f.contribution}
+                    {f.basis && f.basis !== "n/a" ? `, basis: ${f.basis}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
 
         <div className="opportunity-card-footer">
           <RawPayloadExpander opportunityId={opportunity.id} company={opportunity.company} />
