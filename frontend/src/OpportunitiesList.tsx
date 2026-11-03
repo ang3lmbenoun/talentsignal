@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { Briefcase, Flame, Building2, ArrowLeft, type LucideIcon } from "lucide-react";
 import { getStoredToken } from "./auth";
 import { classifyFamily } from "./lib/basisDerivation";
+import { buildVerdict, buildWhatWouldChange } from "./lib/opportunityVerdict";
+import { ContributionBar } from "./components/ContributionBar";
+import { ShowTheMath } from "./components/ShowTheMath";
+import "./components/InfoPopover.css";
 import { computeClientAggregates, clientWhyItMatters, type ClientOpportunity } from "./lib/clientAggregation";
 
 interface ScoreFactor {
@@ -209,33 +213,6 @@ function familyFor(opportunity: Opportunity): string {
   if (opportunity.familyKey) return opportunity.familyKey;
   if (opportunity.title) return classifyFamily(opportunity.title);
   return "general-other";
-}
-
-// S-25 "why this is a signal" -- 1-2 sentence narrative built from the same
-// real reasons/basis/family fields already rendered elsewhere on the card
-// (legacy summary line, basis dot, "how this was scored"). No invented
-// language beyond joining real facts into a sentence.
-function opportunityWhy(opportunity: Opportunity): string {
-  const familyKey = familyFor(opportunity);
-  const family = FAMILY_LABELS[familyKey] ?? familyKey.replaceAll("-", " ");
-  const basis = opportunityBasis(opportunity);
-  const reposted = opportunity.reasons.some((r) => r.includes("reposted"));
-  const noSalary = opportunity.reasons.some((r) => r.includes("no salary range"));
-  const capacityEvidence = opportunity.hardToFillReasons?.some((r) => r.startsWith("capacity:")) ?? false;
-
-  const daysOpen = extractDaysOpen(opportunity);
-  const clauses: string[] = [];
-  if (daysOpen !== undefined) clauses.push(`the posting has been open for ${daysOpen} days`);
-  if (reposted) clauses.push("the role has been posted again");
-  if (noSalary) clauses.push("the posting does not include a salary range");
-  if (basis === "measured") clauses.push(`live ${family} postings have taken longer to close than the overall posting median`);
-  else if (basis === "curated") clauses.push("the title matches a role type selected for closer review");
-  if (capacityEvidence) clauses.push("a public employer hiring-capacity record matched and needs human verification");
-
-  if (clauses.length === 0) {
-    return `We do not currently see a repost, missing salary range, or role-scarcity signal for this ${family} role in the loaded data.`;
-  }
-  return `This ${family} posting is flagged because ${clauses.join("; ")}. These are clues for your team to review, not proof that the role will be difficult to fill.`;
 }
 
 // PROPOSED heuristic, not yet signed off by Ali -- see
@@ -590,6 +567,32 @@ function RecommendationPanel({ opportunity }: { opportunity: Opportunity }) {
   );
 }
 
+// Evidence chip: the same label as before, now a button. Clicking it opens a
+// one-line plain definition of the three bases (measured / curated / none).
+const BASIS_DEFINITIONS: Record<"measured" | "curated" | "none", string> = {
+  measured: "Measured: compared with live postings for similar roles from a source whose dates we trust.",
+  curated: "Curated: the title matches a role type our team has marked as scarce. This is guidance, not a measurement.",
+  none: "None: there is no role-scarcity evidence for this posting. Other clues may still apply.",
+};
+
+function EvidenceChip({ basis }: { basis: "measured" | "curated" | "none" }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className={`opportunity-basis-dot opportunity-basis-dot--${basis} card-evidence-chip`}
+        title={`Evidence basis as stored: ${basis}`}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {basis === "measured" ? "Observed posting data · measured" : basis === "curated" ? "Role guidance · curated" : "No role-scarcity evidence · none"}
+      </button>
+      {open && <p className="card-evidence-definition" role="note">{BASIS_DEFINITIONS[basis]}</p>}
+    </>
+  );
+}
+
 function OpportunityCard({
   opportunity,
   rank,
@@ -621,6 +624,21 @@ function OpportunityCard({
               ? "amber"
               : "red";
   const priority = Boolean(opportunity.hardToFill) && spread === "high";
+  const capacityEvidence = opportunity.hardToFillReasons?.some((r) => r.startsWith("capacity:")) ?? false;
+  // Plain-language verdict + "what would change this": text built from the
+  // facts this card already has; nothing is recomputed or re-ranked.
+  const verdict = buildVerdict({
+    daysOpen,
+    reasons: opportunity.reasons,
+    hardToFill: Boolean(opportunity.hardToFill),
+    basis,
+    capacityEvidence,
+  });
+  const demandFactors = opportunity.factors ?? [];
+  const htfFactors = opportunity.hardToFill ? (opportunity.hardToFillFactors ?? []) : [];
+  const changeText = buildWhatWouldChange([...demandFactors, ...htfFactors]);
+  // Same test the source pill already uses for "Lever · flagged — excluded".
+  const flaggedSource = opportunity.source === "lever";
 
   return (
     <li className={priority ? "opportunity-card opportunity-card--priority" : "opportunity-card"}>
@@ -651,6 +669,8 @@ function OpportunityCard({
           </div>
         </div>
 
+        <p className="card-verdict">{verdict}</p>
+
         <div className="opportunity-score-wrap">
           <ConfidenceRing percent={confidencePct} />
           <span>Demand evidence</span>
@@ -668,46 +688,33 @@ function OpportunityCard({
           <div className="opportunity-stale-callout">Verify active status · open {daysOpen.toLocaleString()} days</div>
         )}
 
-        {/* S-25 (NEW): 1-2 sentence plain-English "why" built from this
-            row's own real reasons/family/basis -- same facts as the legacy
-            summary line and basis dot below, just narrated. */}
-        <div className="opportunity-why">
-          <b>Why your team may want to review it</b>
-          {opportunityWhy(opportunity)}
-        </div>
-
         <div className="opportunity-card-pills">
           <span className="opportunity-pill">Source: {opportunity.source === "greenhouse" ? "Greenhouse · live" : opportunity.source === "lever" ? "Lever · flagged — excluded" : `${opportunity.source} · fixture`}</span>
-          <span className={`opportunity-basis-dot opportunity-basis-dot--${basis}`} title={`Evidence basis as stored: ${basis}`}>
-            {basis === "measured" ? "Observed posting data · measured" : basis === "curated" ? "Role guidance · curated" : "No role-scarcity evidence · none"}
-          </span>
+          <EvidenceChip basis={basis} />
         </div>
+        {flaggedSource && (
+          <p className="card-source-note" role="note">
+            This source is flagged: its posting dates look unusually old, so they are left out of role-scarcity
+            comparisons. Treat this score as a signal to check, not proof.
+          </p>
+        )}
 
-        {/* Restored after the redesign dropped it: the S-04/HF-2 trust-scenario
-            strings (rank, confidence %, joined reasons, source, hard-to-fill
-            reason) so a score is never shown without its why. */}
-        <p className="opportunity-legacy-summary">
-          <span title="Position in this list; it changes when you filter">#{rank}</span> <span>in this list</span>{" "}
-          <span>{confidencePct}% confidence</span>
-          {" — "}
-          <span>{opportunity.reasons.join(", ")}</span>
-          {" · "}
-          <span>source: {opportunity.source}</span>
-          {opportunity.hardToFill && opportunity.hardToFillReasons && opportunity.hardToFillReasons.length > 0 && (
-            <>
-              {" · "}
-              <span aria-label="hard to fill">
-                🔴 hard to fill: {opportunity.hardToFillReasons.join(", ")}
-              </span>
-            </>
-          )}
+        {/* Explainers pass: ONE stacked bar per score replaces the old bullet
+            lists. The raw weights / values / weights version stay in the DOM
+            under "Show the math" below, so the trust scenarios still hold. */}
+        {demandFactors.length > 0 && <ContributionBar title="Demand evidence" factors={demandFactors} />}
+        {htfFactors.length > 0 && <ContributionBar title="Hard-to-fill signal" factors={htfFactors} />}
+
+        <p className="card-what-changes">
+          <b>What would change this</b> {changeText}
         </p>
 
-        {/* S-24 (Fix 3): open by default, not a <details> collapse -- Ali's
-            "where does the signal come from" complaint was that provenance
-            was invisible without leaving the screen. Restored verbatim. */}
+        {/* S-24 (Fix 3): provenance stays visible without any click (Ali's
+            "where does the signal come from" complaint) -- now just the
+            facts, with the repeated reasons moved into the verdict above and
+            the "Show the math" panel below. */}
         <div className="how-scored" aria-label="how this was scored">
-          <h4>How this was scored</h4>
+          <h4>Where this comes from</h4>
           <p>Source: {opportunity.source}</p>
           {opportunity.familyKey && <p>Role family: {opportunity.familyKey}</p>}
           {(() => {
@@ -715,10 +722,6 @@ function OpportunityCard({
             if (!roleScarcity?.basis || roleScarcity.basis === "n/a") return null;
             return <p>Hard-to-fill basis: {roleScarcity.basis}</p>;
           })()}
-          <p>{opportunity.reasons.join(", ")}</p>
-          {opportunity.hardToFill && opportunity.hardToFillReasons && opportunity.hardToFillReasons.length > 0 && (
-            <p>🔴 {opportunity.hardToFillReasons.join(", ")}</p>
-          )}
           {opportunity.hardToFillReasons
             ?.filter((r) => r.startsWith("capacity:"))
             .map((r) => (
@@ -726,18 +729,35 @@ function OpportunityCard({
             ))}
         </div>
 
-        {/* S-30b: the actionable follow-up to "How this was scored" --
-            S-30a's recommendation (loosen the JD, add candidates, or ready
-            to send), with a real editing path where one exists. */}
+        {/* S-30b: the actionable follow-up -- S-30a's recommendation (loosen
+            the JD, add candidates, or ready to send), with a real editing
+            path where one exists. */}
         <RecommendationPanel opportunity={opportunity} />
 
-        {/* S-07 trust scenario: a manager inspecting a score sees the
-            weighted factors behind it, never a bare number. Native
-            <details> keeps it collapsed by default with no extra state. */}
-        <details>
-          <summary>
-            Why this score{opportunity.weightsVersion ? ` (weights ${opportunity.weightsVersion})` : ""}
-          </summary>
+        {/* Every number the bars summarise, unchanged: rank, confidence, the
+            joined reasons, weights version, and each factor's weight / value /
+            contribution (S-04, S-07, HF-1/HF-2 trust scenarios). */}
+        <ShowTheMath>
+          <p className="opportunity-legacy-summary">
+            <span title="Position in this list; it changes when you filter">#{rank}</span> <span>in this list</span>{" "}
+            <span>{confidencePct}% confidence</span>
+            {" — "}
+            <span>{opportunity.reasons.join(", ")}</span>
+            {" · "}
+            <span>source: {opportunity.source}</span>
+            {opportunity.hardToFill && opportunity.hardToFillReasons && opportunity.hardToFillReasons.length > 0 && (
+              <>
+                {" · "}
+                <span aria-label="hard to fill">
+                  🔴 hard to fill: {opportunity.hardToFillReasons.join(", ")}
+                </span>
+              </>
+            )}
+          </p>
+
+          <p>
+            <b>Why this score{opportunity.weightsVersion ? ` (weights ${opportunity.weightsVersion})` : ""}</b>
+          </p>
           {opportunity.factors && opportunity.factors.length > 0 ? (
             <ul>
               {opportunity.factors.map((f) => (
@@ -749,28 +769,25 @@ function OpportunityCard({
           ) : (
             <p>No factor breakdown recorded (scored before S-07).</p>
           )}
-        </details>
 
-        {/* HF-1 transparency carried through HF-2: each indicator's weight,
-            value, and contribution behind the hard-to-fill flag. */}
-        {opportunity.hardToFill &&
-          opportunity.hardToFillFactors &&
-          opportunity.hardToFillFactors.length > 0 && (
-            <details>
-              <summary>
-                Why hard to fill
-                {opportunity.hardToFillVersion ? ` (weights ${opportunity.hardToFillVersion})` : ""}
-              </summary>
-              <ul>
-                {opportunity.hardToFillFactors.map((f) => (
-                  <li key={f.factor}>
-                    {f.factor}: weight {f.weight}, value {f.value}, contributes {f.contribution}
-                    {f.basis && f.basis !== "n/a" ? `, basis: ${f.basis}` : ""}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
+          {opportunity.hardToFill &&
+            opportunity.hardToFillFactors &&
+            opportunity.hardToFillFactors.length > 0 && (
+              <>
+                <p>
+                  <b>Why hard to fill{opportunity.hardToFillVersion ? ` (weights ${opportunity.hardToFillVersion})` : ""}</b>
+                </p>
+                <ul>
+                  {opportunity.hardToFillFactors.map((f) => (
+                    <li key={f.factor}>
+                      {f.factor}: weight {f.weight}, value {f.value}, contributes {f.contribution}
+                      {f.basis && f.basis !== "n/a" ? `, basis: ${f.basis}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+        </ShowTheMath>
 
         <div className="opportunity-card-footer">
           <RawPayloadExpander opportunityId={opportunity.id} company={opportunity.company} />
