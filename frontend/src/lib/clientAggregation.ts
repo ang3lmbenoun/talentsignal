@@ -91,23 +91,19 @@ export function computeClientAggregates(opportunities: ClientOpportunity[]): Cli
 // real, computed facts (verdict, and rank among healthy sources by open
 // req count).
 export function clientWhyItMatters(client: ClientAggregate, allClients: ClientAggregate[]): string {
-  const healthy = allClients.filter((c) => c.verdict === "healthy");
-  const isTopHealthy =
-    client.verdict === "healthy" && healthy.length > 0 && healthy.every((c) => c.openReqs <= client.openReqs);
-
-  const medianPart = client.medianDaysOpen === undefined ? "no measurable median" : `median ${client.medianDaysOpen}d`;
-  const base = `${client.company} has ${client.openReqs} open req${client.openReqs === 1 ? "" : "s"}, ${medianPart}, ${client.repostedCount} reposted role${client.repostedCount === 1 ? "" : "s"}`;
+  const sourceName = client.source === "greenhouse" ? "Greenhouse" : client.source === "lever" ? "Lever" : client.source;
+  const medianPart = client.medianDaysOpen === undefined
+    ? "The source does not provide a usable posting age."
+    : `The median listed posting age is ${client.medianDaysOpen.toLocaleString()} days.`;
+  const base = `${client.company} has n=${client.openReqs} job postings. ${medianPart}`;
 
   if (client.verdict === "flagged — excluded") {
-    return `${base} — flagged and excluded from median-based scoring because its data skews the view.`;
+    return `${base} This source's dates look unusually old and are excluded from measured role-scarcity comparisons. Verify that each posting is still active; the age-based demand score may also be affected.`;
   }
   if (client.verdict === "fixture") {
-    return `${base} — fixture data used to demonstrate the workflow, not a live signal.`;
+    return `${base} These are demo records for illustrating the workflow, not live hiring demand.`;
   }
-  if (isTopHealthy) {
-    return `${base} — this is the hottest live signal source in your data.`;
-  }
-  return `${base} — a steady live signal source in your data.`;
+  return `${base} ${sourceName} is a live source eligible for measured role-scarcity comparisons. Reposted roles: n=${client.repostedCount}; currently flagged hard to fill: n=${client.hardToFillCount}.`;
 }
 
 export function clientWhyItMattersExpanded(client: ClientAggregate, allClients: ClientAggregate[]): string {

@@ -4,6 +4,7 @@ import { getStoredToken } from "./auth";
 interface OpportunityOption {
   id: string;
   company: string;
+  title?: string;
 }
 
 interface PathFactor {
@@ -129,6 +130,7 @@ export function RelationshipsPanel() {
   return (
     <section aria-label="warm relationships">
       <h2>Warm Relationships</h2>
+      <p className="screen-description">Look for existing relationship paths that could support a client introduction. Confirm or dismiss each suggested path to keep the view useful.</p>
 
       <label htmlFor="relationships-opportunity">Opportunity</label>
       <br />
@@ -140,10 +142,12 @@ export function RelationshipsPanel() {
         <option value="">Select an opportunity</option>
         {opportunities.map((opportunity) => (
           <option key={opportunity.id} value={opportunity.id}>
-            {opportunity.company}
+            {opportunity.title ? `${opportunity.title} · ${opportunity.company}` : opportunity.company}
           </option>
         ))}
       </select>
+
+      {opportunities.length === 0 && <p className="workflow-empty-note">No opportunities are available to explore yet.</p>}
 
       {actionError && <p role="alert">{actionError}</p>}
       {state.status === "loading" && <p>Loading relationships...</p>}

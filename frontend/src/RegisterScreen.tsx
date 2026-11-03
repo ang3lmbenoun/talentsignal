@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { storeToken, storeRole, storeEmail } from "./auth";
+import { storeToken, storeRole, storeEmail, storeDisplayName } from "./auth";
 
 interface RegisterScreenProps {
   onSuccess: (token: string) => void;
@@ -48,6 +48,7 @@ export function RegisterScreen({ onSuccess, onSwitchToLogin }: RegisterScreenPro
       storeToken(loginBody.token);
       storeRole(loginBody.user.role);
       storeEmail(loginBody.user.email ?? email);
+      storeDisplayName(loginBody.user.displayName ?? "");
       onSuccess(loginBody.token);
     } catch {
       setError("network error — could not reach the server");

@@ -65,7 +65,7 @@ function matchesAnyKeyword(title: string, keywords: string[]): boolean {
   return keywords.some((keyword) => normalized.includes(` ${normalizeForMatch(keyword).trim()} `));
 }
 
-function matchesScarceRole(title: string): boolean {
+export function matchesScarceRole(title: string): boolean {
   return matchesAnyKeyword(title, HARD_TO_FILL_CONFIG.roleKeywords);
 }
 

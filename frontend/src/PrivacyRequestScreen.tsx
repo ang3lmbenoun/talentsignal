@@ -130,6 +130,7 @@ export function PrivacyRequestScreen() {
   return (
     <section aria-label="privacy requests">
       <h2>Privacy Requests</h2>
+      <p className="screen-description">Record a candidate or client access or erasure request, then follow its status. The result of an access request is displayed once and is not stored here.</p>
       <p role="note">
         Submitted on behalf of a candidate or client who asked what TalentSignal holds on
         them, or asked for it to be erased. Every step (submitted, queued, actioned) is

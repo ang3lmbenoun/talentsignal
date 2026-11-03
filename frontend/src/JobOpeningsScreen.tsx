@@ -119,6 +119,7 @@ export function JobOpeningsScreen() {
   return (
     <section aria-label="job openings">
       <h2>Job Openings</h2>
+      <p className="screen-description">Add the client’s role and required skills here. Match and recommendations use these details to explain candidate fit.</p>
 
       <form onSubmit={handleSubmit} aria-label="create job opening">
         <div>
@@ -178,6 +179,7 @@ export function JobOpeningsScreen() {
       {state.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}
       {state.status === "error" && <p>Could not load job openings.</p>}
       {state.status === "ok" && state.jobOpenings.length === 0 && <p>No job openings yet.</p>}
+      {clients.length === 0 && state.status === "ok" && <p className="workflow-empty-note">Add a client first. Once a client is available, you can create its job opening here.</p>}
       {state.status === "ok" && state.jobOpenings.length > 0 && (
         <ul aria-label="job opening list">
           {state.jobOpenings.map((jobOpening) => (

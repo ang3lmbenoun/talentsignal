@@ -84,6 +84,7 @@ export function MatchScreen() {
   return (
     <section aria-label="client matchmaking">
       <h2>Client Matchmaking</h2>
+      <p className="screen-description">Choose a job to rank candidates by fit. The list explains matched skills and gaps; it does not contact candidates.</p>
 
       <form onSubmit={handleSubmit} aria-label="run match">
         <label htmlFor="match-job">Job opening</label>
@@ -102,6 +103,8 @@ export function MatchScreen() {
           {state.status === "loading" ? "Matching..." : "Find candidates"}
         </button>
       </form>
+
+      {jobOpenings.length === 0 && <p className="workflow-empty-note">There are no job openings to match yet. Add a client and create a job opening in Jobs first.</p>}
 
       {state.status === "ok" && (
         <>

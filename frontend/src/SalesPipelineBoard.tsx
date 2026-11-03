@@ -135,6 +135,7 @@ export function SalesPipelineBoard() {
   return (
     <section aria-label="sales pipeline">
       <h2>Sales Pipeline</h2>
+      <p className="screen-description">Track client conversations from prospecting through close. Moving a card records the stage your team selected.</p>
 
       <form onSubmit={handleAddSubmit} aria-label="add client to pipeline">
         <label htmlFor="pipeline-add-client">Add a client</label>
@@ -158,6 +159,8 @@ export function SalesPipelineBoard() {
         </button>
       </form>
       {actionError && <p role="alert">{actionError}</p>}
+
+      {availableClients.length === 0 && state.pipeline.length === 0 && <p className="workflow-empty-note">No clients are available to add yet. Create or identify a client before tracking an opportunity here.</p>}
 
       <div aria-label="pipeline board">
         {STAGES.map((stage) => (

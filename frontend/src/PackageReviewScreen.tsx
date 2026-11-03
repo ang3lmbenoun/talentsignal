@@ -6,6 +6,7 @@ import { composeEmailDraft } from "./lib/emailDraft";
 interface OpportunityOption {
   id: string;
   company: string;
+  title?: string;
   confidenceScore: number;
 }
 
@@ -340,6 +341,7 @@ export function PackageReviewScreen() {
   return (
     <section aria-label="opportunity packages">
       <h2>Opportunity Packages</h2>
+      <p className="screen-description">Prepare a client-facing draft from an opportunity and a job opening. A person must review and release it; the draft itself does not send anything.</p>
       <p role="note">
         Every package below is composed by PackageAgent, not a person — nothing here has been
         sent to anyone. Release is the only action that records a human decision.
@@ -377,7 +379,7 @@ export function PackageReviewScreen() {
             </option>
             {opportunities.map((opportunity) => (
               <option key={opportunity.id} value={opportunity.id}>
-                {opportunity.company}
+                {opportunity.title ? `${opportunity.title} · ${opportunity.company}` : opportunity.company}
               </option>
             ))}
           </select>

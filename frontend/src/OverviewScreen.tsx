@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Users, Briefcase, Flame, Play, Clock, Radar, Target, AlertTriangle, type LucideIcon } from "lucide-react";
+import { Building2, Users, Briefcase, Flame, Clock, Radar, Target, AlertTriangle, ArrowRight, Radio, type LucideIcon } from "lucide-react";
 import { getStoredToken, getStoredRole, getStoredEmail } from "./auth";
 import { useOpportunitiesSummary } from "./hooks/useOpportunitiesSummary";
 import {
@@ -225,36 +225,23 @@ const BASIS_TIERS = [
 // to the loaded opportunity count.
 function BasisBar({ summary }: { summary: ReturnType<typeof summarizeBasis> }) {
   if (summary.total === 0) return null;
+  const descriptions: Record<(typeof BASIS_TIERS)[number]["key"], string> = {
+    measured: "Eligible live posting history can be compared with similar roles.",
+    curated: "The title matches a reviewed role type; this is guidance, not measured scarcity.",
+    none: "No role-difficulty evidence is available yet.",
+  };
   return (
-    <div className="stat-tile-stacked">
-      <div
-        className="stat-tile-stacked-track"
-        role="img"
-        aria-label={`Scoring basis: ${summary.measured} measured, ${summary.curated} curated, ${summary.none} no basis, out of ${summary.total} total`}
-      >
-        {BASIS_TIERS.map((tier) => {
-          const count = summary[tier.key];
-          if (count === 0) return null;
-          return (
-            <div
-              key={tier.key}
-              className="stat-tile-stacked-seg"
-              style={{ width: `${(count / summary.total) * 100}%`, background: `var(${tier.colorVar})` }}
-            />
-          );
-        })}
-      </div>
-      <div className="stat-tile-stacked-legend">
-        {BASIS_TIERS.map((tier) => (
-          <span className="stat-tile-stacked-legend-item" key={tier.key}>
-            <span
-              className="stat-tile-stacked-legend-swatch"
-              style={{ background: `var(${tier.colorVar})` }}
-            />
-            {tier.label} {summary[tier.key]}
-          </span>
-        ))}
-      </div>
+    <div className="overview-basis-list" aria-label={`Role-difficulty evidence across ${summary.total} loaded postings`}>
+      {BASIS_TIERS.map((tier) => {
+        const count = summary[tier.key];
+        return (
+          <div className="overview-basis-row" key={tier.key}>
+            <div className="overview-basis-heading"><b>{tier.key === "measured" ? "Measured from live data" : tier.key === "curated" ? "Reviewed role guidance" : "No role-difficulty evidence"}</b><strong>{count.toLocaleString()} <small>postings · {Math.round((count / summary.total) * 100)}%</small></strong></div>
+            <div className="overview-basis-track" role="img" aria-label={`${count} of ${summary.total} postings, ${Math.round((count / summary.total) * 100)} percent`}><i style={{ width: `${(count / summary.total) * 100}%`, background: `var(${tier.colorVar})` }} /></div>
+            <span>{descriptions[tier.key]}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -290,55 +277,6 @@ interface Tier {
   // callouts describe the existing confidenceScore cutoffs below, they do
   // not change them.
   callout: string;
-}
-
-const RADIUS = 60;
-const STROKE = 18;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
-// Pure SVG donut -- no chart library. Stacks one <circle> per segment, each
-// using stroke-dasharray/-dashoffset to draw only its own arc of the ring;
-// the enclosing <g> is rotated -90deg so segments start at 12 o'clock.
-function DonutChart({ tiers }: { tiers: Tier[] }) {
-  const total = tiers.reduce((sum, tier) => sum + tier.count, 0);
-  let cumulative = 0;
-
-  return (
-    <svg viewBox="0 0 160 160" className="donut-svg" role="img" aria-label="Opportunity distribution by confidence tier">
-      <g transform="rotate(-90 80 80)">
-        {total === 0 ? (
-          <circle cx="80" cy="80" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth={STROKE} />
-        ) : (
-          tiers
-            .filter((tier) => tier.count > 0)
-            .map((tier) => {
-              const dash = (tier.count / total) * CIRCUMFERENCE;
-              const offset = -cumulative;
-              cumulative += dash;
-              return (
-                <circle
-                  key={tier.label}
-                  cx="80"
-                  cy="80"
-                  r={RADIUS}
-                  fill="none"
-                  stroke={`var(${tier.colorVar})`}
-                  strokeWidth={STROKE}
-                  strokeDasharray={`${dash} ${CIRCUMFERENCE - dash}`}
-                  strokeDashoffset={offset}
-                />
-              );
-            })
-        )}
-      </g>
-      <text x="80" y="76" textAnchor="middle" className="donut-total-value">
-        {total}
-      </text>
-      <text x="80" y="94" textAnchor="middle" className="donut-total-label">
-        total
-      </text>
-    </svg>
-  );
 }
 
 // S-25 "Story of this week": a 3-sentence narrative built entirely from
@@ -404,15 +342,25 @@ function TopOpportunities({ top3 }: { top3: Opportunity[] }) {
   if (top3.length === 0) return null;
   return (
     <div className="overview-card overview-top-opps">
-      <h3>Top opportunities · ranked by hard-to-fill signal</h3>
+      <h3>Roles to review first</h3>
+      <p className="overview-card-subhead">Ranked by the role-difficulty indicator. Check the clues and confirm the posting is active before approaching a client.</p>
       <div className="top-opp-grid">
         {top3.map((o) => {
-          const why = (o.hardToFillReasons?.length ? o.hardToFillReasons : o.reasons).slice(0, 2).join("; ");
+          const rawReasons = (o.hardToFillReasons?.length ? o.hardToFillReasons : o.reasons).slice(0, 2);
+          const why = rawReasons.map((reason) => {
+            const measured = reason.match(/role scarcity: measured \(family '([^']+)', median (\d+)d vs global (\d+)d\)/i);
+            if (measured) return `Similar eligible live roles stay open for a median of ${measured[2]} days, compared with ${measured[3]} days across eligible roles.`;
+            if (reason.startsWith("role scarcity: curated")) return "The title matches a reviewed role type; this is guidance, not a measured scarcity rate.";
+            const open = reason.match(/^open (\d+) days?$/i);
+            if (open) return `This posting has been open for ${open[1]} days; confirm that it is still active.`;
+            if (reason === "reposted role") return "This role appears to have been reposted; check whether the client still needs it.";
+            return reason.replace(/[_-]+/g, " ").replace(/^./, (letter) => letter.toUpperCase());
+          }).join(" ");
           return (
             <div className="top-opp-card" key={o.id}>
               <div className="top-opp-card-head">
                 <span className="top-opp-card-title">{o.title}</span>
-                <span className="top-opp-score-badge mono">{o.hardToFillScore!.toFixed(2)}</span>
+                <span className="top-opp-score-badge mono" title="Role-difficulty indicator for review, not a probability of hiring">{Math.round(o.hardToFillScore! * 100)}% to review</span>
               </div>
               <div className="top-opp-card-company">{o.company}</div>
               {why && <p className="top-opp-card-why">{why}</p>}
@@ -490,9 +438,9 @@ function useFitsSummary(enabled: boolean): FitsSummaryState {
 }
 
 const FIT_BUCKET_MEANINGS: { key: keyof FitDistribution; label: string; colorVar: string; meaning: string }[] = [
-  { key: "ge85", label: "≥85%", colorVar: "--success", meaning: "Strong match — send outreach" },
+  { key: "ge85", label: "≥85%", colorVar: "--success", meaning: "Strong overlap — review before outreach" },
   { key: "b70_84", label: "70–84%", colorVar: "--accent", meaning: "Needs review" },
-  { key: "b60_69", label: "60–69%", colorVar: "--warning", meaning: "Loosen JD or add candidates" },
+  { key: "b60_69", label: "60–69%", colorVar: "--warning", meaning: "Review criteria or search for candidates" },
   { key: "lt60", label: "<60%", colorVar: "--danger", meaning: "No overlap yet" },
   { key: "insufficient_data", label: "insufficient data", colorVar: "--border", meaning: "Candidate data insufficient" },
 ];
@@ -509,9 +457,9 @@ function FitDistributionPanel({ summary }: { summary: FitsSummary }) {
 
   return (
     <div className="overview-card overview-card-fit-distribution">
-      <h3>Fit distribution</h3>
+      <h3>Best candidate skill match, by role</h3>
       <p className="overview-card-subhead">
-        n={total} opportunities · basis: {summary.measuredCount} measured, {total - summary.measuredCount} insufficient data
+        For each loaded posting, this shows the strongest available candidate match. {summary.measuredCount} roles have measured fit; {total - summary.measuredCount} do not have enough candidate data. Fit reflects skill overlap, not a probability of hiring.
       </p>
       <div className="stat-tile-stacked-track" role="img" aria-label="Fit score distribution across all loaded opportunities">
         {FIT_BUCKET_MEANINGS.map((bucket) => {
@@ -545,7 +493,59 @@ function FitDistributionPanel({ summary }: { summary: FitsSummary }) {
 // because GET /api/hidden-demand/opportunities itself is admin/sales-only
 // on the backend (same as the real Opportunities screen's RoleGate) -- a
 // recruiter would otherwise get a 403 on data they were never meant to see.
-export function OverviewScreen() {
+function StartHereGuide({
+  canSeeOpportunities,
+  onNavigate,
+}: {
+  canSeeOpportunities: boolean;
+  onNavigate: (view: string) => void;
+}) {
+  const steps = canSeeOpportunities
+    ? [
+        { label: "Spot demand", detail: "See the job signals behind the alert.", view: "signals", action: "Explore signals", icon: Radio },
+        { label: "Prioritize roles", detail: "Review roles that may be hardest to fill.", view: "targeting", action: "Review targeting", icon: Flame },
+        { label: "Check candidate fit", detail: "Compare fit evidence and gaps.", view: "match", action: "Review matches", icon: Target },
+        { label: "Decide what to share", detail: "Prepare a draft for human review.", view: "packages", action: "Open packages", icon: Briefcase },
+      ]
+    : [
+        { label: "Review open roles", detail: "See the jobs your team is working on.", view: "jobs", action: "Open jobs", icon: Briefcase },
+        { label: "Review candidates", detail: "Check candidate profiles and evidence.", view: "candidates", action: "Open candidates", icon: Users },
+        { label: "Check recommendations", detail: "See suggested next steps and rationale.", view: "recommendations", action: "View recommendations", icon: Target },
+        { label: "Prepare a draft", detail: "Review package details before anything is shared.", view: "packages", action: "Open packages", icon: ArrowRight },
+      ];
+
+  return (
+    <section className="overview-start" aria-labelledby="overview-start-title">
+      <div className="overview-start-copy">
+        <span className="overview-start-eyebrow">TalentSignal · staffing demand intelligence</span>
+        <h2 id="overview-start-title">Find hard-to-fill hiring demand. Decide what to do next.</h2>
+        <p>
+          TalentSignal brings job-market signals and candidate-fit evidence together so your team can spot
+          difficult roles, prioritize its review, and prepare a response. Every recommendation is for your
+          team to review; nothing is sent automatically.
+        </p>
+      </div>
+      <div className="overview-start-steps" aria-label="Suggested workflow">
+        {steps.map(({ label, detail, view, action, icon: Icon }) => (
+          <article className="overview-start-step" key={view}>
+            <div className="overview-start-step-top">
+              <span className="overview-start-step-marker" aria-hidden="true" />
+              <Icon size={17} aria-hidden="true" />
+            </div>
+            <h3>{label}</h3>
+            <p>{detail}</p>
+            <button type="button" className="overview-start-link" onClick={() => onNavigate(view)}>
+              {action}<ArrowRight size={14} aria-hidden="true" />
+            </button>
+          </article>
+        ))}
+      </div>
+      <p className="overview-start-footnote">Scores and recommendations include their evidence and data coverage so you can judge how much to rely on them.</p>
+    </section>
+  );
+}
+
+export function OverviewScreen({ onNavigate }: { onNavigate: (view: string) => void }) {
   const role = getStoredRole();
   const canSeeOpportunities = role === "admin" || role === "sales";
   const email = getStoredEmail();
@@ -656,13 +656,11 @@ export function OverviewScreen() {
               no endpoint exposing them to the frontend, and this pass adds
               no new backend route -- using the non-config-exposing fallback
               the ticket offered for exactly this case. */}
-          <p className="overview-subtitle">Your talent signal intelligence</p>
+          <p className="overview-subtitle">A clear view of hiring demand, role difficulty, and candidate fit.</p>
         </div>
-        <button type="button" disabled title="Coming soon" className="overview-run-ingestion">
-          <Play size={15} aria-hidden="true" />
-          Run Ingestion
-        </button>
       </div>
+
+      <StartHereGuide canSeeOpportunities={canSeeOpportunities} onNavigate={onNavigate} />
 
       {/* S-25: 4 equal-weight KPI tiles per the approved mockup -- replaces
           the prior single dominant hero tile plus the Clients/Candidates
@@ -698,7 +696,7 @@ export function OverviewScreen() {
             icon={Building2}
             value={tileValue(clients)}
             label="Active clients"
-            why="companies feeding requisitions"
+            why="client records for your team to review"
             caption={clients.status === "ok" ? `n=${clients.count} clients` : undefined}
             error={clients.status === "error"}
           />
@@ -706,7 +704,7 @@ export function OverviewScreen() {
             icon={Users}
             value={tileValue(candidates)}
             label="Candidates"
-            why="available to match"
+            why="profiles in your candidate pool"
             caption={candidates.status === "ok" ? `n=${candidates.count} candidates` : undefined}
             error={candidates.status === "error"}
           />
@@ -744,8 +742,8 @@ export function OverviewScreen() {
               icon={Target}
               value={String(fitsSummaryState.summary.distribution.ge85)}
               label="Reqs with strong candidates (≥85%)"
-              why="ready for outreach right now"
-              basisPill={`n=${fitsSummaryState.summary.totalOpportunities} reqs scored`}
+              why="potentially strong fit; review evidence first"
+              basisPill={`n=${fitsSummaryState.summary.measuredCount} of ${fitsSummaryState.summary.totalOpportunities} reqs with measured fit`}
             >
               <FitBucketMiniHistogram distribution={fitsSummaryState.summary.distribution} highlight="ge85" />
             </KpiTile>
@@ -755,7 +753,7 @@ export function OverviewScreen() {
               icon={Target}
               value={loadingValue(fitsSummaryState.status)}
               label="Reqs with strong candidates (≥85%)"
-              why="ready for outreach right now"
+              why="potentially strong fit; review evidence first"
               error={fitsSummaryState.status === "error"}
             />
           )}
@@ -767,8 +765,8 @@ export function OverviewScreen() {
                 fitsSummaryState.summary.distribution.b60_69 + fitsSummaryState.summary.distribution.lt60,
               )}
               label="Reqs needing attention (<70%)"
-              why="Ali wants you to look here"
-              basisPill={`n=${fitsSummaryState.summary.totalOpportunities} reqs scored`}
+              why="review fit gaps and the available evidence"
+              basisPill={`n=${fitsSummaryState.summary.measuredCount} of ${fitsSummaryState.summary.totalOpportunities} reqs with measured fit`}
             >
               <FitBucketMiniHistogram distribution={fitsSummaryState.summary.distribution} highlight="lt60" />
             </KpiTile>
@@ -778,7 +776,7 @@ export function OverviewScreen() {
               icon={AlertTriangle}
               value={loadingValue(fitsSummaryState.status)}
               label="Reqs needing attention (<70%)"
-              why="Ali wants you to look here"
+              why="review fit gaps and the available evidence"
               error={fitsSummaryState.status === "error"}
             />
           )}
@@ -787,6 +785,12 @@ export function OverviewScreen() {
 
       {canSeeOpportunities && fitsSummaryState.status === "ok" && (
         <FitDistributionPanel summary={fitsSummaryState.summary} />
+      )}
+
+      {canSeeOpportunities && fitsSummaryState.status === "ok" && (
+        <p className="overview-fit-caveat" role="note">
+          Candidate fit is skill overlap, not a hiring probability. Demo profiles may be included; review the candidate records before using these matches as sourcing evidence.
+        </p>
       )}
 
       {canSeeOpportunities && (
@@ -829,32 +833,28 @@ export function OverviewScreen() {
           </div>
 
           <div className="overview-card overview-card-distribution">
-            <h3>Opportunity Distribution</h3>
+            <h3>How strong the hiring-demand evidence looks</h3>
+            <p className="overview-card-subhead">These bands group loaded postings by demand-evidence score. They describe posting signals, not candidate fit or the chance of a hire.</p>
             {opportunitiesState.status === "loading" && <p>Loading...</p>}
             {opportunitiesState.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}
             {opportunitiesState.status === "error" && <p>Could not load distribution.</p>}
             {opportunitiesState.status === "ok" && (
-              <div className="donut-layout">
-                <DonutChart tiers={tiers} />
-                <ul className="donut-legend" aria-label="confidence tier legend">
-                  {tiers.map((tier) => (
-                    <li key={tier.label}>
-                      <span className="donut-legend-swatch" style={{ background: `var(${tier.colorVar})` }} />
-                      <span className="donut-legend-label">{tier.label}</span>
-                      <span className="donut-legend-count">
-                        {tier.count} ({tiersTotal > 0 ? Math.round((tier.count / tiersTotal) * 100) : 0}%)
-                      </span>
-                      <span className="donut-legend-callout">· {tier.callout}</span>
-                    </li>
-                  ))}
-                </ul>
+              <div className="overview-tier-list" aria-label={`Demand evidence bands across ${tiersTotal} loaded postings`}>
+                {tiers.map((tier) => {
+                  const share = tiersTotal > 0 ? Math.round((tier.count / tiersTotal) * 100) : 0;
+                  return <div className="overview-tier-row" key={tier.label}>
+                    <div className="overview-tier-heading"><b>{tier.label}</b><strong>{tier.count.toLocaleString()} <small>postings · {share}%</small></strong></div>
+                    <div className="overview-tier-track" role="img" aria-label={`${tier.count} of ${tiersTotal} postings, ${share} percent`}><i style={{ width: `${share}%`, background: `var(${tier.colorVar})` }} /></div>
+                    <span>{tier.callout === "act now" ? "Strongest demand clues; review the underlying requisition." : tier.callout === "strong signal" ? "Several demand clues are present; check the role details." : tier.callout === "verify before acting" ? "Confirm the posting and evidence before prioritizing." : "Few demand clues; use other information before deciding."}</span>
+                  </div>;
+                })}
               </div>
             )}
           </div>
 
           <div className="overview-card overview-card-basis">
-            <h3>Basis distribution</h3>
-            <p className="overview-card-subhead">n={basisSummary.total} opportunities</p>
+            <h3>Evidence behind role-difficulty estimates</h3>
+            <p className="overview-card-subhead">How much support the app has for saying a role may be hard to fill, across {basisSummary.total.toLocaleString()} loaded postings.</p>
             {opportunitiesState.status === "loading" && <p>Loading...</p>}
             {opportunitiesState.status === "unauthenticated" && <p>Your session has expired. Please log in again.</p>}
             {opportunitiesState.status === "error" && <p>Could not load basis distribution.</p>}

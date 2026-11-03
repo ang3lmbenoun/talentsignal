@@ -31,9 +31,10 @@ type TargetingState =
 
 // Redesign per talentsignal-redesign.html's "Targeting" screen -- same
 // .kpi-tile visual language S-25/S-29 already established on Overview
-// (icon badge, big value, placeholder sparkline, "why it matters" caption),
-// reused here rather than invented fresh, so Targeting finally matches the
-// rest of the app instead of being the one screen still on bare <ul>/<li>.
+// (icon badge, big value, sample-size caption, and plain-English context),
+// reused here rather than invented fresh, so Targeting matches the rest of
+// the app. This screen has no history series, so it avoids a decorative
+// sparkline that could be mistaken for measured trend data.
 function KpiTile({
   icon: Icon,
   value,
@@ -56,11 +57,8 @@ function KpiTile({
         </span>
       </div>
       <span className="kpi-tile-value mono">{value}</span>
-      <svg className="kpi-tile-sparkline" viewBox="0 0 100 24" role="img" aria-label="Trend placeholder, no history yet">
-        <path d="M0 18 L15 12 L30 15 L45 8 L60 12 L75 6 L100 10" fill="none" stroke="var(--border)" strokeWidth="2" />
-      </svg>
       {caption && <p className="kpi-tile-caption">{caption}</p>}
-      <p className="kpi-tile-trend">Trend pending · needs 4+ weeks of ingestion</p>
+      <p className="kpi-tile-trend">A trend appears after at least four weeks of history.</p>
       <p className="kpi-tile-why">Why it matters: {why}</p>
     </div>
   );
@@ -68,6 +66,39 @@ function KpiTile({
 
 function companyMonogram(company: string): string {
   return company.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || "—";
+}
+
+const FIXTURE_NAME_PREFIX = /^Fixture Candidate\s*[—–-]\s*/i;
+
+function isFixtureName(name: string): boolean {
+  return FIXTURE_NAME_PREFIX.test(name);
+}
+
+function candidateDisplayName(name: string): string {
+  return name.replace(FIXTURE_NAME_PREFIX, "");
+}
+
+const ROLE_FAMILY_LABELS: Record<string, string> = {
+  "engineering-swe": "software engineering", "ml-ai": "AI and machine learning",
+  "data-analytics": "data and analytics", security: "security", "cloud-infra": "cloud and infrastructure",
+  "support-cs": "support and customer success", "sales-bizdev": "sales and business development",
+  "retail-ops": "retail and operations", "general-other": "other roles",
+};
+
+function explainTargetReason(reason: string): string {
+  const measured = reason.match(/role scarcity: measured \(family '([^']+)', median (\d+)d vs global (\d+)d\)/i);
+  if (measured) return `Similar eligible live postings in ${ROLE_FAMILY_LABELS[measured[1]] ?? measured[1]} stay open for a median of ${measured[2]} days, compared with ${measured[3]} days across eligible roles.`;
+  if (reason.startsWith("role scarcity: curated")) return "The title matches a role type selected for closer review. This is role guidance, not a measured scarcity rate.";
+  const open = reason.match(/^open (\d+) days?$/i);
+  if (open) return `This posting has been open for ${open[1]} days. Check that it is still active and whether the sourcing plan needs to change.`;
+  if (reason === "reposted role") return "This role appears to have been reposted. Check whether the client is still hiring or renewed the listing.";
+  const capacity = reason.match(/^capacity: ([^,]+) matched \(([^)]+)\), (high-confidence|low-confidence)(.*)$/i);
+  if (capacity) {
+    const confidence = capacity[3].toLowerCase() === "high-confidence" ? "stronger" : "less certain";
+    const excluded = capacity[4].includes("excluded") ? " The record is outside the recent-history window, so do not count it as current evidence." : "";
+    return `A ${confidence} related hiring record from ${capacity[1]} matched ${capacity[2]}.${excluded}`;
+  }
+  return reason.replace(/[_-]+/g, " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
 interface FitCluster {
@@ -102,7 +133,7 @@ function CandidateRow({ student }: { student: Student }) {
   return (
     <div className="targeting-candidate">
       <div className="between">
-        <b>{student.name}</b>
+        <b>{candidateDisplayName(student.name)}</b>
         <span className="targeting-candidate-fit mono">{Math.round(student.fitScore * 100)}% fit</span>
       </div>
       <div className="row" style={{ marginTop: "4px" }}>
@@ -127,10 +158,12 @@ function CandidateRow({ student }: { student: Student }) {
 
 function TargetRoleCard({ target }: { target: Target }) {
   const clusters = groupByFitPercent(target.students);
-  const topFit = target.students[0]?.fitScore ?? 0;
+  const fitAvailable = target.requirements.length > 0 && target.students.length > 0;
+  const topFit = fitAvailable ? target.students[0]?.fitScore ?? 0 : null;
 
   return (
-    <article className="overview-card targeting-role-card">
+    <details className="overview-card targeting-role-card targeting-role-details">
+      <summary className="targeting-role-summary">
       <div className="between">
         <div className="opportunity-card-header" style={{ marginBottom: 0 }}>
           <span className="opportunity-monogram" style={{ background: "var(--accent)" }}>
@@ -141,22 +174,30 @@ function TargetRoleCard({ target }: { target: Target }) {
             <span className="small">{target.company}</span>
           </div>
         </div>
-        <span className="opportunity-age-badge opportunity-age-badge--red">
-          🔴 {Math.round(target.hardToFillScore * 100)}% hard to fill
+        <span className="opportunity-age-badge opportunity-age-badge--red" title="Role-difficulty indicator for review; not a probability of hiring">
+          {Math.round(target.hardToFillScore * 100)}% role-difficulty signal
         </span>
       </div>
 
       <div className="opportunity-card-pills" style={{ marginTop: "10px" }}>
-        <span className="opportunity-pill">Requirements · n={target.requirements.length}</span>
-        <span className="opportunity-pill">Ranked candidates · n={target.students.length}</span>
+        <span className="opportunity-pill">{target.requirements.length > 0 ? `Role criteria · ${target.requirements.length} skills` : "Role criteria · not identified"}</span>
+        <span className="opportunity-pill">{fitAvailable ? `Compared · ${target.students.length} candidates` : `Candidate pool · ${target.students.length} profiles`}</span>
         {target.roleType && <span className="opportunity-pill">{target.roleType}</span>}
-        <span className="opportunity-pill">Top fit · {Math.round(topFit * 100)}%</span>
+        <span className="opportunity-pill">{topFit === null ? "Candidate fit · unavailable" : `Closest fit · ${Math.round(topFit * 100)}%`}</span>
       </div>
 
+      <span className="targeting-expand-label">{target.requirements.length > 0 ? "Open fit breakdown" : "View why this role is flagged"}</span>
+      </summary>
+      <div className="targeting-role-content">
+
       <div className="opportunity-why" style={{ marginTop: "10px" }}>
-        <b>Why this is a signal</b>
-        {target.hardToFillReasons.join(", ")}
+        <b>Why the role is flagged for review</b>
+        {target.hardToFillReasons.length > 0
+          ? <ul className="targeting-reason-list">{target.hardToFillReasons.map((reason, index) => <li key={`${reason}-${index}`}>{explainTargetReason(reason)}</li>)}</ul>
+          : <p>No specific role-difficulty clues were provided. Review the posting details before deciding whether it needs attention.</p>}
       </div>
+
+      {target.requirements.length === 0 && <p className="targeting-data-note" role="note">Candidate fit is not available because the app could not identify role skills to compare. Review or add clear requirements before using fit results to decide whether to adjust the job criteria or source more candidates.</p>}
 
       {target.requirements.length > 0 && (
         <p className="small" style={{ marginTop: "8px" }}>
@@ -167,18 +208,18 @@ function TargetRoleCard({ target }: { target: Target }) {
       <div className="hr" />
 
       <div className="between">
-        <h4 className="section-title">Candidate-fit clusters</h4>
-        <span className="small">Each cluster is a real, shared fit percentage — not a chosen range.</span>
+        <h4 className="section-title">{target.requirements.length > 0 ? "Candidate fit by skill overlap" : "Candidate fit unavailable"}</h4>
+        <span className="small">{target.requirements.length > 0 ? "Select a bar to see candidates and the skills that matched." : "Add identifiable role criteria before comparing candidates."}</span>
       </div>
 
-      <div className="target-bars">
+      {target.requirements.length > 0 && <div className="target-bars">
         {clusters.map((cluster) => (
           <details className="cluster" key={cluster.percent}>
             <summary>
               <span className="cluster-label">
-                {cluster.label} · {cluster.percent}%
+                {cluster.label}
               </span>
-              <span className="barline">
+              <span className="barline" aria-hidden="true">
                 <i
                   style={{
                     width: `${(cluster.students.length / target.students.length) * 100}%`,
@@ -186,7 +227,8 @@ function TargetRoleCard({ target }: { target: Target }) {
                   }}
                 />
               </span>
-              <b className="mono">n={cluster.students.length}</b>
+        <b className="mono">{cluster.students.length} candidates</b>
+              <span className="cluster-action">Review candidates</span>
             </summary>
             <div className="cluster-list targeting-cluster-list">
               {cluster.students.map((student) => (
@@ -195,17 +237,23 @@ function TargetRoleCard({ target }: { target: Target }) {
             </div>
           </details>
         ))}
-      </div>
+      </div>}
+      {target.requirements.length > 0 && clusters.length === 0 && (
+        <p className="targeting-empty-state">No candidate profiles are available to compare for this role yet.</p>
+      )}
       <p className="caption">
-        Counts total n={target.students.length}. The {Math.round(target.hardToFillScore * 100)}% hard-to-fill score is not a
-        candidate fit score.
+        {target.requirements.length > 0 ? `Compared ${target.students.length} candidates. Candidate fit estimates skill overlap with this role.` : "Candidate fit cannot be estimated until role requirements are identified."} The role-difficulty signal describes the role. Neither is a guarantee of hiring success.
       </p>
-    </article>
+      </div>
+    </details>
   );
 }
 
 export function HardToFillTargeting() {
   const [state, setState] = useState<TargetingState>({ status: "loading" });
+  const [query, setQuery] = useState("");
+  const [client, setClient] = useState("all");
+  const [fitEvidence, setFitEvidence] = useState("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -247,42 +295,63 @@ export function HardToFillTargeting() {
   if (state.targets.length === 0) return <p>No hard-to-fill roles to target yet.</p>;
 
   const targets = state.targets;
-  const totalStudents = targets.reduce((sum, t) => sum + t.students.length, 0);
-  const topFitAcrossAll = Math.max(0, ...targets.flatMap((t) => t.students.map((s) => s.fitScore)));
+  const comparableTargets = targets.filter((target) => target.requirements.length > 0 && target.students.length > 0);
+  const totalStudents = comparableTargets.reduce((sum, target) => sum + target.students.length, 0);
+  const topFitAcrossAll = Math.max(0, ...comparableTargets.flatMap((t) => t.students.map((s) => s.fitScore)));
   const avgHardToFill = targets.reduce((sum, t) => sum + t.hardToFillScore, 0) / targets.length;
+  const includesFixtureCandidates = targets.some((target) => target.students.some((student) => isFixtureName(student.name)));
+  const clients = [...new Set(targets.map((target) => target.company))].sort();
+  const visibleTargets = targets.filter((target) => {
+    if (client !== "all" && target.company !== client) return false;
+    if (query && !`${target.title} ${target.company}`.toLowerCase().includes(query.toLowerCase())) return false;
+    const fitAvailable = target.requirements.length > 0 && target.students.length > 0;
+    if (fitEvidence === "available" && !fitAvailable) return false;
+    if (fitEvidence === "unavailable" && fitAvailable) return false;
+    return true;
+  });
 
   return (
     <section aria-label="hard-to-fill targeting">
-      <h2>Targeting</h2>
+      <div className="targeting-intro">
+        <h2>Hard-to-fill targeting</h2>
+        <p>
+          Review roles that may take more effort to fill, then compare candidate fit. A hard-to-fill score describes the role; a fit score describes one candidate against that role.
+        </p>
+      </div>
+      {includesFixtureCandidates && (
+        <p className="targeting-data-note" role="note">
+          Synthetic demo candidate profiles are included. Their repeated “Fixture Candidate” prefix is hidden here for readability.
+        </p>
+      )}
 
       <div className="kpi-grid">
         <KpiTile
           icon={Flame}
           value={String(targets.length)}
           label="Target roles"
-          why="hard-to-fill roles currently cleared for targeting"
-          caption={`n=${targets.length} requisitions`}
+          why="roles that the existing difficulty rules flagged for a closer look"
+          caption={`${targets.length} requisitions in this view`}
         />
         <KpiTile
           icon={Users}
           value={String(totalStudents)}
-          label="Ranked candidate rows"
-          why="every candidate ranked against at least one target role"
-          caption={`n=${totalStudents} ranked rows`}
+          label="Fit comparisons"
+          why="candidate-to-role comparisons across the roles shown below"
+          caption={`${totalStudents} comparisons · one candidate can appear for multiple roles`}
         />
         <KpiTile
           icon={TargetIcon}
-          value={`${Math.round(topFitAcrossAll * 100)}%`}
-          label="Top candidate fit"
-          why="the single best real match across every target role"
-          caption="n=1 candidate"
+          value={comparableTargets.length > 0 ? `${Math.round(topFitAcrossAll * 100)}%` : "—"}
+          label="Closest available candidate fit"
+          why="the strongest skill-overlap score among candidates currently compared; review the gaps before deciding"
+          caption={`${totalStudents} candidate-role comparisons with identified requirements`}
         />
         <KpiTile
           icon={Percent}
           value={`${Math.round(avgHardToFill * 100)}%`}
-          label="Avg hard-to-fill score"
-          why="average difficulty across the roles shown below"
-          caption={`n=${targets.length} roles`}
+          label="Average role-difficulty signal"
+          why="average indicator across flagged roles; it is not a probability that a role will be filled"
+          caption={`Across ${targets.length} flagged roles`}
         />
       </div>
 
@@ -290,14 +359,26 @@ export function HardToFillTargeting() {
           A human decides who to submit; the app never submits anyone. There is
           deliberately no "submit" control anywhere on this screen. */}
       <p role="note" className="opportunity-why" style={{ marginBottom: "14px" }}>
-        <b>Suggestion, not an action</b>
-        Suggested matches — a human decides who to submit. Nothing is submitted automatically.
+        <b>How to read this list</b>
+        A role-difficulty signal points to a role worth reviewing; candidate fit shows skill overlap with that role. Check the reasons and missing skills, then decide whether to adjust the job criteria or source more candidates. Nothing is submitted automatically.
       </p>
 
+      <div className="filterbar targeting-filters" aria-label="Filter target roles">
+        <input className="select" type="search" placeholder="Search role or client" aria-label="Search role or client" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <select className="select" aria-label="Filter by client" value={client} onChange={(event) => setClient(event.target.value)}>
+          <option value="all">All clients</option>{clients.map((name) => <option key={name} value={name}>{name}</option>)}
+        </select>
+        <select className="select" aria-label="Filter by candidate evidence" value={fitEvidence} onChange={(event) => setFitEvidence(event.target.value)}>
+          <option value="all">All fit evidence</option><option value="available">Fit can be assessed</option><option value="unavailable">Fit unavailable</option>
+        </select>
+        <span className="caption">Showing {visibleTargets.length} of {targets.length} flagged roles</span>
+      </div>
+
       <div className="targeting-role-list">
-        {targets.map((target) => (
+        {visibleTargets.map((target) => (
           <TargetRoleCard target={target} key={target.opportunityId} />
         ))}
+        {visibleTargets.length === 0 && <p className="targeting-empty-state">No roles match these filters. Clear the search or choose another client.</p>}
       </div>
     </section>
   );

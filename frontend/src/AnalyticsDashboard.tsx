@@ -525,6 +525,7 @@ export function AnalyticsDashboard() {
   return (
     <section aria-label="analytics dashboard">
       <h2>Agency Analytics</h2>
+      <p className="screen-description">Use this view to understand recruiting activity and demand evidence. Placement history is demo data until your team records real activity.</p>
 
       <div className="kpi-grid">
         <KpiTile

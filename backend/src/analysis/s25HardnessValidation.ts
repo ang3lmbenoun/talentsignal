@@ -1,13 +1,15 @@
 import { createPool } from "../db/pool";
 import type { Pool } from "pg";
+import { matchesScarceRole } from "../scoring/hardToFillScore";
 
 /**
  * S-25 (Basecamp todos/10215916782) — read-only analysis: does the
  * hard-to-fill score, computed with ONLY the evidence that was actually
  * available the first time a requisition was observed, track real
- * time-to-close? This file never touches the live scoring path
- * (hardToFillScore.ts / HARD_TO_FILL_CONFIG are not imported or modified)
- * and never writes to any table — see main()'s single read-only query set.
+ * time-to-close? This file does not call the live scorer or modify its
+ * configuration, and never writes to any table — see main()'s read-only
+ * query set. It reuses only the scorer's curated title-matching helper so
+ * the first-observation prior cannot drift from decision 026's keywords.
  *
  * NOTE ON NAMING: this analysis is independently labeled "S-25" in
  * Basecamp. It is unrelated to this codebase's other "S-25" (the
@@ -72,10 +74,10 @@ export type RoleScarcityBasis = "measured" | "curated" | "none" | "n/a";
  * capacitySignal is EXCLUDED too: it was added in S-24, after decision 026,
  * and was never part of the formula this analysis is validating.
  *
- * roleScarcity.value is read as already computed and stored (measured's
- * continuous [0,1] ratio, curated's 1, or none's 0) — this function does
- * not re-derive roleScarcity itself, only combines it with the repost
- * signal under the renormalized weights.
+ * roleScarcity is reconstructed from the first raw title using decision
+ * 026's curated keyword prior. Do not read the current stored factor here:
+ * measured roleScarcity is derived from observed days_open and can therefore
+ * leak outcome information into a first-observation prediction.
  */
 export function computeFirstObservationScore(
   roleScarcity: { basis: RoleScarcityBasis; value: number },
@@ -165,12 +167,6 @@ interface RawHistoryRow {
   raw_response: unknown;
 }
 
-interface OpportunityRow {
-  source: string;
-  external_signal_id: string;
-  hard_to_fill_factors: { factor: string; basis: RoleScarcityBasis; value: number }[];
-}
-
 async function loadRawHistory(pool: Pool): Promise<RawHistoryRow[]> {
   const { rows } = await pool.query<RawHistoryRow>(
     "SELECT source, external_id, fetched_at, run_id, raw_response FROM raw_requisitions ORDER BY source, external_id, fetched_at ASC",
@@ -178,23 +174,15 @@ async function loadRawHistory(pool: Pool): Promise<RawHistoryRow[]> {
   return rows;
 }
 
-async function loadRoleScarcityByKey(pool: Pool): Promise<Map<string, { basis: RoleScarcityBasis; value: number }>> {
-  const { rows } = await pool.query<OpportunityRow>(
-    "SELECT source, external_signal_id, hard_to_fill_factors FROM opportunities WHERE source IN ('greenhouse', 'lever')",
-  );
-  const byKey = new Map<string, { basis: RoleScarcityBasis; value: number }>();
-  for (const row of rows) {
-    const factor = (row.hard_to_fill_factors ?? []).find((f) => f.factor === "roleScarcity");
-    if (factor) {
-      byKey.set(`${row.source}::${row.external_signal_id}`, { basis: factor.basis, value: factor.value });
-    }
-  }
-  return byKey;
-}
 
 function requisitionIdOf(rawResponse: unknown): string | null {
   const parsed = rawResponse as { requisition_id?: string } | null;
   return parsed?.requisition_id ?? null;
+}
+
+function titleOf(rawResponse: unknown): string {
+  const parsed = rawResponse as { title?: string; text?: string } | null;
+  return parsed?.title ?? parsed?.text ?? "";
 }
 
 interface ItemHistory {
@@ -203,6 +191,7 @@ interface ItemHistory {
   firstObservedAt: Date;
   firstRunId: string | null;
   firstRequisitionId: string | null;
+  firstTitle: string;
   lastSeenAt: Date;
 }
 
@@ -225,6 +214,7 @@ function groupHistoryByItem(rows: RawHistoryRow[]): ItemHistory[] {
       firstObservedAt: new Date(first.fetched_at),
       firstRunId: first.run_id,
       firstRequisitionId: requisitionIdOf(first.raw_response),
+      firstTitle: titleOf(first.raw_response),
       lastSeenAt: new Date(last.fetched_at),
     });
   }
@@ -266,7 +256,7 @@ export interface S25Result {
 }
 
 export async function runAnalysis(pool: Pool): Promise<S25Result> {
-  const [rawHistory, roleScarcityByKey] = await Promise.all([loadRawHistory(pool), loadRoleScarcityByKey(pool)]);
+  const rawHistory = await loadRawHistory(pool);
   const items = groupHistoryByItem(rawHistory);
 
   // "the LATEST ingestion run for that source" -- the most recent
@@ -307,8 +297,12 @@ export async function runAnalysis(pool: Pool): Promise<S25Result> {
       continue;
     }
 
-    const roleScarcity = roleScarcityByKey.get(`${item.source}::${item.externalId}`);
-    if (!roleScarcity) continue; // no stored score for this req -- cannot be analyzed.
+    // Rebuild decision 026's original curated role prior from the title that
+    // was actually visible at first observation. The current opportunities
+    // row is deliberately not consulted: its measured roleScarcity can be
+    // derived from later days_open observations, which would leak outcomes.
+    const curatedMatch = matchesScarceRole(item.firstTitle);
+    const roleScarcity = { basis: curatedMatch ? "curated" as const : "none" as const, value: curatedMatch ? 1 : 0 };
 
     const repostVisible = wasRepostVisibleAtFirstObservation(
       item.firstRequisitionId,
@@ -325,7 +319,7 @@ export async function runAnalysis(pool: Pool): Promise<S25Result> {
     if (!earliestFirstObserved || item.firstObservedAt < earliestFirstObserved) earliestFirstObserved = item.firstObservedAt;
     if (!latestClosedAt || closedAt > latestClosedAt) latestClosedAt = closedAt;
 
-    const roleScarcityValue = roleScarcity.basis === "none" ? 0 : roleScarcity.value;
+    const roleScarcityValue = roleScarcity.value;
     if (score >= HIGH_LOW_CUTOFF) {
       highDays.push(days);
       highRoleScarcity.push(roleScarcityValue);

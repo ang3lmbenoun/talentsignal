@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TalentSignal — Opportunities & Signals</title>
+
+<!--
+================================================================================
+  TALENTSIGNAL — FIELD → VISUAL MAP  (for the engineer implementing this)
+  Two screens, one design system, toggled by the top nav. Nothing invented;
+  every element below either binds to an existing field or is flagged as a
+  DERIVED heuristic / REQUIRES-NEW-FIELD. All demo numbers compute LIVE from
+  the 4 verbatim sample rows (n=4). Production universe is ~1,000 opps / 2
+  companies — the honest-limits panel on Screen 2 states this.
+
+  ── SCREEN 1 · OPPORTUNITIES ────────────────────────────────────────────────
+  company          → monogram logo circle + name
+  title            → job title line   ⚠ NOT in sample rows → representative;
+                       bind to real `title`
+  confidence       → radial ring, % centered; colored BRAND (trust), not age
+  days_open        → age chip color-coded per Ali: green <30, amber 30-53,
+                       red >=54. ▲ glyph = long-open magnitude, NOT a trend.
+  reposted         → "reposted" pill (only when true)
+  has_salary_range → "no salary range" pill (only when FALSE — absence is the signal)
+  source           → source chip
+  hard_to_fill     → priority treatment: violet value-rail + "top pick" marker
+  reasons[]        → pill badges (never a joined string)
+  role_family      → family chip; also feeds spread heuristic. REAL (given).
+  basis            → trust dot (measured=filled, curated=half, none=hollow).
+                       ⚠ NOT in sample rows → representative, assigned CONSISTENT
+                       with decision 046 (Lever excluded from measured
+                       role-scarcity, so gopuff/lever rows = none). Bind to real `basis`.
+  raw_payload      → "Prove it" button → modal of pretty JSON (preserved).
+  S-22/S-23 text   → scarcity rationale kept accessible: measured cards show a
+                       "role scarcity: measured" line (tooltip carries the
+                       family-median-vs-global-33d rationale) and Screen 2's
+                       measured-scarcity card surfaces the canonical example.
+
+  DERIVED · SPREAD POTENTIAL (high|medium|low — NOT a $ figure):
+     confidence  >=85→3 ; 70-84→2 ; <70→1
+     days_open   <30→1 ; 30-53→2 ; 54-180→3 ; >180→1   (>180 DISCOUNTED, see note)
+     role_family ml-ai/security→3 ; engineering-swe/data→2 ; retail-ops/support-cs/general-other→1
+     sum 3-9:  >=7 High | 4-6 Medium | <=3 Low
+     NOTE: >180d discounted, not rewarded — a req open 2-5yrs (gopuff 839/1777)
+     is almost certainly abandoned, not hard-to-fill. This is the sole place we
+     deviate from "older=better." To confirm vs infer → requires new field:
+     `is_active` / `last_verified_at`. To replace heuristic with real dollars →
+     requires new fields: `bill_rate`, `pay_rate` (spread = bill − pay).
+  DERIVED · STALE FLAG: "verify · likely stale" when days_open>365 (same field need).
+
+  KPI STRIP: Total Opportunities (REAL=4), Hard-to-Fill (REAL=2),
+     Total Clients / Total Candidates ⚠ app-level KPIs, not in opp rows →
+     dotted "sample" values; bind to existing app state.
+
+  ── SCREEN 2 · SIGNALS (macro / managing-director view) ─────────────────────
+  Hero: total signal instances (REAL, live over loaded opps) +
+     weekly movement ⚠ requires new field: `weekly_delta` (shown pending, no fake arrow).
+  Signal cards (count + % of total opps), each from a real field:
+     reposted=true | days_open>=54 | days_open>=365 | has_salary_range=false |
+     basis=measured | basis=curated.
+     History slot: no time-series exists → every card shows
+     "needs 4+ weeks of ingestion" instead of a sparkline (no fake trends).
+     ⚠ measured/curated counts depend on representative `basis` (see above).
+  Role-family donut: % of opps per family (REAL families, live counts).
+  Source health: per-source opp count + median days_open (live, n=4) + quality
+     verdict. Decision-046 rationale quotes given production medians
+     (Lever ≈1,169 / Greenhouse ≈33). Lever excluded from role-scarcity.
+  Honest-limits panel: states the ~1,000-opps / 2-company reality verbatim.
+================================================================================
+-->
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg:#e9edf1; --rail:#dde3ea; --surface:#ffffff; --surface-2:#f4f6f9;
+    --ink:#16202b; --ink-2:#556072; --ink-3:#8a94a3; --line:#dce1e8;
+    --brand:#5a4be0; --brand-soft:#efedfd; --brand-ink:#4535c9;
+    --teal:#0d9488; --slate:#64748b; --pink:#c02c86;
+    --red:#d8434a; --red-soft:#fbe7e8; --amber:#c67c12; --amber-soft:#fbf0dd;
+    --green:#1f8a54; --green-soft:#e2f2ea;
+    --glow:0 0 0 1px rgba(90,75,224,.35), 0 10px 30px -12px rgba(90,75,224,.45);
+    --card-shadow:0 1px 2px rgba(16,32,43,.06);
+  }
+  html.dark{
+    --bg:#0d131a; --rail:#111a23; --surface:#161f2a; --surface-2:#1c2836;
+    --ink:#e7ecf2; --ink-2:#9aa7b7; --ink-3:#6b788a; --line:#263241;
+    --brand:#8b7dff; --brand-soft:#241f47; --brand-ink:#b6acff;
+    --teal:#2dd4bf; --slate:#94a3b8; --pink:#f472b6;
+    --red:#f0666c; --red-soft:#33191c; --amber:#e0a13d; --amber-soft:#2e2411;
+    --green:#4bc287; --green-soft:#132a20;
+    --glow:0 0 0 1px rgba(139,125,255,.45), 0 14px 34px -14px rgba(139,125,255,.5);
+    --card-shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+  body{background:var(--bg);color:var(--ink);font-family:'Archivo',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+  .tnum{font-variant-numeric:tabular-nums;}
+  .card{background:var(--surface);border:1px solid var(--line);box-shadow:var(--card-shadow);}
+  .card--priority{box-shadow:var(--glow);}
+  .dotted{border-bottom:1px dashed var(--ink-3);cursor:help;}
+  .tab{color:var(--ink-2);}
+  .tab[data-active="true"]{color:var(--ink);}
+  .tab[data-active="true"]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--brand);border-radius:2px;}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
+  @media (prefers-reduced-motion:no-preference){
+    .pop{animation:pop .18s ease-out}
+    @keyframes pop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+  }
+</style>
+</head>
+
+<body class="min-h-screen">
+
+<!-- ================================ TOP NAV ================================ -->
+<header class="sticky top-0 z-30 border-b" style="background:var(--rail);border-color:var(--line)">
+  <div class="max-w-[1400px] mx-auto px-5 h-16 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-2 shrink-0">
+      <span class="inline-block w-2.5 h-2.5 rounded-full" style="background:var(--brand)"></span>
+      <span class="text-[17px] font-extrabold tracking-tight">TalentSignal</span>
+    </div>
+    <nav class="flex items-end gap-6 h-full flex-1 pl-2">
+      <button data-tab="opps" data-active="true" class="tab relative h-full text-[14px] font-semibold">Opportunities</button>
+      <button data-tab="signals" data-active="false" class="tab relative h-full text-[14px] font-semibold">Signals</button>
+    </nav>
+    <button id="themeBtn" class="h-9 px-3 rounded-lg text-[13px] font-semibold flex items-center gap-2 border shrink-0"
+            style="border-color:var(--line);color:var(--ink-2)">
+      <span id="themeIcon"></span><span id="themeLbl">Dark</span>
+    </button>
+  </div>
+</header>
+
+<main class="max-w-[1400px] mx-auto px-5 py-6">
+
+  <!-- ============================== SCREEN 1 ============================== -->
+  <div id="view-opps">
+    <div class="flex items-baseline justify-between mb-5">
+      <h1 class="text-[15px] font-semibold" style="color:var(--ink-2)">Sorted by spread potential — highest-value roles first</h1>
+    </div>
+    <section id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7"></section>
+    <section id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></section>
+  </div>
+
+  <!-- ============================== SCREEN 2 ============================== -->
+  <div id="view-signals" class="hidden">
+
+    <!-- hero -->
+    <section class="card rounded-2xl p-6 mb-6 flex flex-col md:flex-row md:items-end gap-6">
+      <div class="flex-1">
+        <div class="text-[12px] font-semibold mb-2" style="color:var(--ink-2)">Total signals detected</div>
+        <div class="flex items-baseline gap-3">
+          <span id="heroTotal" class="text-[52px] leading-none font-extrabold tnum" style="color:var(--brand)"></span>
+          <span id="heroSub" class="text-[13px]" style="color:var(--ink-3)"></span>
+        </div>
+      </div>
+      <div class="md:border-l md:pl-6 pt-2" style="border-color:var(--line)">
+        <div class="text-[12px] font-semibold mb-2" style="color:var(--ink-2)">Net movement this week</div>
+        <div class="inline-flex items-center gap-2 h-8 px-3 rounded-lg text-[12px] font-semibold"
+             style="background:var(--surface-2);color:var(--ink-3);box-shadow:inset 0 0 0 1px var(--line)"
+             title="No week-over-week history in the data yet. Requires new field: weekly_delta.">
+          pending — requires new field: <span class="mono">weekly_delta</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- signal breakdown -->
+    <h2 class="text-[13px] font-bold mb-3" style="color:var(--ink-2)">Signal breakdown</h2>
+    <section id="signalGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8"></section>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <!-- role family donut -->
+      <section class="card rounded-2xl p-6">
+        <h2 class="text-[13px] font-bold mb-1" style="color:var(--ink-2)">Role-family distribution</h2>
+        <p class="text-[11px] mb-4" style="color:var(--ink-3)">Share of loaded opportunities by <span class="mono">role_family</span> · n=4 sample</p>
+        <div id="familyChart" class="flex items-center gap-6"></div>
+      </section>
+
+      <!-- source health -->
+      <section class="card rounded-2xl p-6">
+        <h2 class="text-[13px] font-bold mb-1" style="color:var(--ink-2)">Source health</h2>
+        <p class="text-[11px] mb-4" style="color:var(--ink-3)">Median <span class="mono">days_open</span> per source · live n=4</p>
+        <div id="sourceHealth" class="flex flex-col gap-3"></div>
+        <div class="mt-4 pt-3 border-t text-[11.5px] leading-relaxed" style="border-color:var(--line);color:var(--ink-2)">
+          <span class="font-semibold">Decision 046 —</span> production medians gopuff ≈ <span class="mono">1,169d</span> (Lever)
+          vs GitLab ≈ <span class="mono">33d</span> (Greenhouse). Lever excluded from role-scarcity
+          measurement (zombie-req skew). Seed board is a synthetic fixture, excluded from all market metrics.
+        </div>
+      </section>
+    </div>
+
+    <!-- honest limits -->
+    <section class="rounded-2xl p-5 border-2 border-dashed" style="border-color:var(--line);background:var(--surface-2)">
+      <div class="flex items-start gap-3">
+        <span id="limIcon" style="color:var(--amber)"></span>
+        <div>
+          <h3 class="text-[13px] font-bold mb-1">Read these numbers with the dataset in mind</h3>
+          <p class="text-[12.5px] leading-relaxed" style="color:var(--ink-2)">
+            Current dataset: ~1,000 opportunities from 2 companies. Percentage metrics are directionally
+            useful but limited by company-universe size — they will scale meaningfully past 10+ companies.
+            This demo renders the 4 sample rows (n=4), so every percentage is coarse by design; the
+            aggregation logic is what ships, wired to the full ingested set.
+          </p>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- ============================ RAW PAYLOAD MODAL ============================ -->
+<div id="modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background:rgba(8,12,17,.55)">
+  <div class="pop w-full max-w-2xl rounded-2xl border overflow-hidden" style="background:var(--surface);border-color:var(--line)">
+    <div class="flex items-center justify-between px-5 h-14 border-b" style="border-color:var(--line)">
+      <div class="text-[14px] font-bold">Raw payload — <span id="modalCo" style="color:var(--brand)"></span></div>
+      <button id="modalClose" class="w-8 h-8 rounded-lg flex items-center justify-center" style="color:var(--ink-2)" aria-label="Close">✕</button>
+    </div>
+    <pre id="modalBody" class="mono text-[12.5px] leading-relaxed p-5 overflow-auto max-h-[65vh]" style="background:var(--surface-2);color:var(--ink)"></pre>
+    <div class="px-5 py-3 text-[12px] border-t" style="border-color:var(--line);color:var(--ink-3)">
+      Unmodified JSON from the source connector — the "prove it" record behind the score.
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================================ DATA ================================ *
+ *  4 verbatim sample rows. role_family is REAL (given). title/basis are   *
+ *  representative; basis assigned consistent with decision 046 (Lever     *
+ *  excluded from measured role-scarcity → gopuff rows = none).            *
+ * ====================================================================== */
+const OPPS = [
+  { company:"GitLab", title:"Staff ML Engineer"/*rep*/, confidence:100, days_open:54,
+    reposted:true, has_salary_range:false, source:"greenhouse", hard_to_fill:true,
+    reasons:["in-demand role type","open 54 days","reposted role"],
+    role_family:"engineering-swe", basis:"measured"/*rep, greenhouse eligible*/,
+    scarcity:"role scarcity: measured (family 'engineering-swe', family median vs global 33d)",
+    raw_payload:{ id:"gh_88213", company:"GitLab", title:"Staff ML Engineer", board:"greenhouse",
+      first_seen:"2025-07-21", last_seen:"2025-09-13", days_open:54, reposted:true,
+      salary_range:null, role_family:"engineering-swe", score:{confidence:100, basis:"measured"},
+      location:"Remote (Global)" } },
+
+  { company:"Seed Co 00003", title:"Backend Engineer"/*rep*/, confidence:71, days_open:3,
+    reposted:true, has_salary_range:false, source:"seed-job-board", hard_to_fill:true,
+    reasons:["in-demand role type","open 3 days","reposted role"],
+    role_family:"general-other", basis:"none"/*rep, seed fixture*/, scarcity:null,
+    raw_payload:{ id:"seed_00003", company:"Seed Co 00003", title:"Backend Engineer",
+      board:"seed-job-board", first_seen:"2025-09-10", last_seen:"2025-09-13", days_open:3,
+      reposted:true, salary_range:null, role_family:"general-other",
+      score:{confidence:71, basis:"none"}, note:"synthetic seed record" } },
+
+  { company:"Gopuff", title:"Fulfillment Ops Lead"/*rep*/, confidence:68, days_open:839,
+    reposted:false, has_salary_range:false, source:"lever", hard_to_fill:false,
+    reasons:["in-demand role type"], role_family:"retail-ops",
+    basis:"none"/*rep, Lever excluded per decision 046*/, scarcity:null,
+    raw_payload:{ id:"lv_41127", company:"Gopuff", title:"Fulfillment Ops Lead", board:"lever",
+      first_seen:"2023-05-28", last_seen:"2025-09-13", days_open:839, reposted:false,
+      salary_range:null, role_family:"retail-ops", score:{confidence:68, basis:"none"},
+      location:"Philadelphia, PA" } },
+
+  { company:"Gopuff", title:"Warehouse Systems Analyst"/*rep*/, confidence:68, days_open:1777,
+    reposted:false, has_salary_range:false, source:"lever", hard_to_fill:false,
+    reasons:["in-demand role type"], role_family:"retail-ops",
+    basis:"none"/*rep, Lever excluded per decision 046*/, scarcity:null,
+    raw_payload:{ id:"lv_20904", company:"Gopuff", title:"Warehouse Systems Analyst", board:"lever",
+      first_seen:"2020-11-01", last_seen:"2025-09-13", days_open:1777, reposted:false,
+      salary_range:null, role_family:"retail-ops", score:{confidence:68, basis:"none"},
+      location:"Philadelphia, PA" } }
+];
+
+/* --------------------------- derivations --------------------------- */
+function ageBucket(d){ if(d<30)return{key:"green"}; if(d<54)return{key:"amber"}; return{key:"red"}; }
+function spread(o){
+  const c=o.confidence>=85?3:o.confidence>=70?2:1;
+  const a=o.days_open<30?1:o.days_open<54?2:o.days_open<=180?3:1;
+  const fam={"ml-ai":3,"security":3,"engineering-swe":2,"data":2,"retail-ops":1,"support-cs":1,"general-other":1};
+  const f=fam[o.role_family]??2; const total=c+a+f;
+  return {total, level: total>=7?"high":total>=4?"medium":"low"};
+}
+const isStale = o => o.days_open>365;
+
+/* ------------------------------- icons ------------------------------- */
+const I={
+  arrowUp:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  clock:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  warn:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>',
+  star:'<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"/></svg>',
+  ext:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>',
+  hist:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>',
+  sun:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>',
+  moon:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>'
+};
+
+/* --------------------------- logos --------------------------- */
+const BRANDS={ "GitLab":{bg:"#fc6d26",fg:"#fff",m:"GL"}, "Gopuff":{bg:"#009f5c",fg:"#fff",m:"GP"} };
+function logo(co,size){
+  const b=BRANDS[co]||{bg:"var(--surface-2)",fg:"var(--ink-2)",m:co.replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase()||"—"};
+  const s=size||9;
+  return `<div class="w-${s} h-${s} rounded-full flex items-center justify-center text-[12px] font-extrabold shrink-0" style="background:${b.bg};color:${b.fg}">${b.m}</div>`;
+}
+
+/* =========================== SCREEN 1 render =========================== */
+function renderKpis(){
+  const total=OPPS.length, hard=OPPS.filter(o=>o.hard_to_fill).length;
+  const cards=[
+    {label:"Total opportunities", value:total, real:true},
+    {label:"Hard to fill", value:hard, real:true, accent:true},
+    {label:"Total clients", value:"128", real:false},
+    {label:"Total candidates", value:"342", real:false}
+  ];
+  kpis.innerHTML=cards.map(k=>`
+    <div class="card rounded-xl px-4 py-3.5">
+      <div class="text-[11px] font-semibold mb-1.5" style="color:var(--ink-2)">${k.label}</div>
+      <div class="flex items-end gap-2">
+        <div class="text-[28px] leading-none font-extrabold tnum ${k.real?'':'dotted'}"
+             style="${k.accent?'color:var(--brand)':''}"
+             ${k.real?'':'title="App-level KPI — not in opportunity rows. Sample value; bind to existing app state."'}>${k.value}</div>
+        ${k.real?'':'<span class="text-[10px] mb-1 font-semibold" style="color:var(--ink-3)">sample</span>'}
+      </div>
+    </div>`).join('');
+}
+function confRing(pct){
+  const r=17,c=2*Math.PI*r,off=c*(1-pct/100);
+  return `<svg width="46" height="46" viewBox="0 0 46 46" class="shrink-0">
+    <circle cx="23" cy="23" r="${r}" fill="none" stroke="var(--line)" stroke-width="4"/>
+    <circle cx="23" cy="23" r="${r}" fill="none" stroke="var(--brand)" stroke-width="4" stroke-linecap="round"
+      stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 23 23)"/>
+    <text x="23" y="24" text-anchor="middle" dominant-baseline="middle" class="mono" font-size="11" font-weight="600" fill="var(--ink)">${pct}</text>
+  </svg>`;
+}
+function basisDot(o){
+  const t={measured:o.scarcity||"score basis: measured",
+           curated:"score basis: curated (human-reviewed)",
+           none:"score basis: none (unverified / source excluded from role-scarcity)"}[o.basis];
+  const fill=o.basis==="measured"?"var(--brand)":o.basis==="curated"?"var(--ink-3)":"transparent";
+  return `<span title="${t}" class="inline-flex items-center gap-1 text-[10px] font-semibold" style="color:var(--ink-3)">
+    <span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${fill};box-shadow:inset 0 0 0 1px var(--ink-3)"></span>${o.basis}</span>`;
+}
+function agePill(o){
+  const b=ageBucket(o.days_open);
+  const bg={red:"var(--red-soft)",amber:"var(--amber-soft)",green:"var(--green-soft)"}[b.key];
+  const fg={red:"var(--red)",amber:"var(--amber)",green:"var(--green)"}[b.key];
+  const icon=b.key==="green"?I.clock:I.arrowUp;
+  return `<span class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[12px] font-bold tnum" style="background:${bg};color:${fg}">${icon}${o.days_open}d</span>`;
+}
+function spreadChip(o){
+  const s=spread(o);
+  const styles={high:"background:var(--brand);color:#fff;",
+    medium:"background:transparent;color:var(--brand);box-shadow:inset 0 0 0 1.5px var(--brand);",
+    low:"background:var(--surface-2);color:var(--ink-3);box-shadow:inset 0 0 0 1px var(--line);"}[s.level];
+  const lit={low:1,medium:2,high:3}[s.level];
+  const seg=n=>`<span class="w-1.5 h-3 rounded-sm inline-block" style="background:${n<=lit?'currentColor':'var(--line)'}"></span>`;
+  const title=`Derived heuristic (not a $ figure): confidence + days_open + role_family = ${s.total}/9 → ${s.level}. Requires bill_rate & pay_rate for a real spread.`;
+  return `<div class="inline-flex items-center gap-2 h-7 pl-2.5 pr-2 rounded-lg text-[11px] font-extrabold" style="${styles}" title="${title}">
+    <span>${s.level} spread</span><span class="flex items-end gap-0.5">${seg(1)}${seg(2)}${seg(3)}</span></div>`;
+}
+function pill(txt){ return `<span class="inline-flex items-center h-6 px-2 rounded-md text-[11px] font-semibold" style="background:var(--surface-2);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line)">${txt}</span>`; }
+
+function renderCards(){
+  const rows=OPPS.map((o,i)=>({o,i,s:spread(o).total})).sort((a,b)=>b.s-a.s||b.o.confidence-a.o.confidence);
+  const top=rows[0].i;
+  grid.innerHTML=rows.map(({o,i})=>{
+    const b=ageBucket(o.days_open);
+    const rail={red:"var(--red)",amber:"var(--amber)",green:"var(--green)"}[b.key];
+    const priority=o.hard_to_fill&&spread(o).level==="high";
+    const stale=isStale(o);
+    return `
+    <article class="card ${priority?'card--priority':''} rounded-2xl overflow-hidden flex flex-col relative" style="${stale?'opacity:.82':''}">
+      <div class="absolute left-0 top-0 bottom-0 w-1.5" style="background:${priority?'var(--brand)':rail}"></div>
+      <div class="pl-5 pr-4 pt-4 pb-4 flex flex-col gap-3.5 h-full">
+        <div class="flex items-start gap-3">
+          ${logo(o.company)}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <h3 class="text-[15px] font-extrabold truncate">${o.company}</h3>
+              ${i===top?`<span class="inline-flex items-center gap-1 h-5 px-1.5 rounded text-[10px] font-extrabold" style="background:var(--brand-soft);color:var(--brand-ink)">${I.star}top pick</span>`:''}
+            </div>
+            <div class="text-[12.5px] font-medium truncate" style="color:var(--ink-2)">${o.title}</div>
+          </div>
+          ${confRing(o.confidence)}
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">${agePill(o)}${spreadChip(o)}</div>
+        ${stale?`<div class="flex items-center gap-1.5 text-[11px] font-semibold -mt-1" style="color:var(--amber)">${I.warn} verify · likely stale (${o.days_open}d open)</div>`:''}
+        <div class="flex flex-wrap gap-1.5">${o.reasons.map(pill).join('')}</div>
+        <div class="flex flex-wrap gap-1.5">
+          ${o.reposted?pill("reposted"):''}${!o.has_salary_range?pill("no salary range"):''}${pill(o.role_family)}${pill(o.source)}
+        </div>
+        ${o.scarcity?`<div class="text-[11px] leading-snug mono" style="color:var(--ink-3)" title="Family-median-vs-global rationale — requires new field: family_median_days_open">${o.scarcity}</div>`:''}
+        <div class="mt-auto pt-3 flex items-center justify-between border-t" style="border-color:var(--line)">
+          ${basisDot(o)}
+          <button onclick="openPayload(${i})" class="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-bold" style="background:var(--brand-soft);color:var(--brand-ink)">${I.ext} Prove it</button>
+        </div>
+      </div>
+    </article>`;
+  }).join('');
+}
+
+/* =========================== SCREEN 2 render =========================== */
+const N=OPPS.length;
+const SIGNALS=[
+  {name:"Reposted roles", test:o=>o.reposted, field:"reposted = true", tone:"brand"},
+  {name:"Long-open (≥54d)", test:o=>o.days_open>=54, field:"days_open ≥ 54", tone:"red"},
+  {name:"Very stale (≥365d)", test:o=>o.days_open>=365, field:"days_open ≥ 365", tone:"amber"},
+  {name:"No salary range", test:o=>!o.has_salary_range, field:"has_salary_range = false", tone:"brand"},
+  {name:"Measured role-scarcity", test:o=>o.basis==="measured", field:"basis = measured", tone:"brand", rep:true},
+  {name:"Curated role-scarcity", test:o=>o.basis==="curated", field:"basis = curated", tone:"brand", rep:true}
+];
+function renderHero(){
+  const totalInstances=SIGNALS.reduce((s,sig)=>s+OPPS.filter(sig.test).length,0);
+  heroTotal.textContent=totalInstances;
+  heroSub.textContent=`signal instances across ${N} loaded opportunities · n=${N} sample`;
+}
+function renderSignals(){
+  signalGrid.innerHTML=SIGNALS.map(sig=>{
+    const count=OPPS.filter(sig.test).length;
+    const pct=Math.round(count/N*100);
+    const fg={brand:"var(--brand)",red:"var(--red)",amber:"var(--amber)"}[sig.tone];
+    const bg={brand:"var(--brand)",red:"var(--red)",amber:"var(--amber)"}[sig.tone];
+    return `
+    <div class="card rounded-2xl p-4">
+      <div class="flex items-start justify-between mb-3">
+        <div>
+          <div class="text-[13px] font-bold">${sig.name}</div>
+          <div class="text-[10.5px] mono mt-0.5" style="color:var(--ink-3)">${sig.field}${sig.rep?' · rep basis':''}</div>
+        </div>
+        <div class="text-right">
+          <div class="text-[26px] leading-none font-extrabold tnum" style="color:${fg}">${count}</div>
+          <div class="text-[11px] font-semibold tnum" style="color:var(--ink-3)">${pct}% of opps</div>
+        </div>
+      </div>
+      <div class="h-1.5 rounded-full overflow-hidden mb-3" style="background:var(--surface-2)">
+        <div class="h-full rounded-full" style="width:${pct}%;background:${bg}"></div>
+      </div>
+      <div class="flex items-center gap-1.5 text-[10.5px] font-semibold" style="color:var(--ink-3)">
+        ${I.hist} needs 4+ weeks of ingestion for a trend
+      </div>
+    </div>`;
+  }).join('');
+}
+function renderFamily(){
+  const fams={};
+  OPPS.forEach(o=>fams[o.role_family]=(fams[o.role_family]||0)+1);
+  const palette=["var(--brand)","var(--teal)","var(--slate)","var(--pink)"];
+  const entries=Object.entries(fams).sort((a,b)=>b[1]-a[1]);
+  const r=52,c=2*Math.PI*r; let acc=0;
+  const segs=entries.map(([f,n],i)=>{
+    const frac=n/N, len=frac*c, dash=`${len.toFixed(1)} ${(c-len).toFixed(1)}`, off=-acc; acc+=len;
+    return `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${palette[i%palette.length]}" stroke-width="18"
+      stroke-dasharray="${dash}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 70 70)"/>`;
+  }).join('');
+  const legend=entries.map(([f,n],i)=>`
+    <div class="flex items-center gap-2 text-[12px]">
+      <span class="w-3 h-3 rounded-sm inline-block" style="background:${palette[i%palette.length]}"></span>
+      <span class="font-semibold">${f}</span>
+      <span class="mono ml-auto tnum" style="color:var(--ink-3)">${Math.round(n/N*100)}%</span>
+    </div>`).join('');
+  familyChart.innerHTML=`
+    <svg width="140" height="140" viewBox="0 0 140 140" class="shrink-0">${segs}
+      <text x="70" y="66" text-anchor="middle" class="tnum" font-size="22" font-weight="800" fill="var(--ink)">${N}</text>
+      <text x="70" y="84" text-anchor="middle" font-size="10" fill="var(--ink-3)">opps</text>
+    </svg>
+    <div class="flex-1 flex flex-col gap-2 min-w-0">${legend}</div>`;
+}
+function renderSourceHealth(){
+  const bySrc={};
+  OPPS.forEach(o=>(bySrc[o.source]=bySrc[o.source]||[]).push(o.days_open));
+  const median=a=>{const s=[...a].sort((x,y)=>x-y),m=Math.floor(s.length/2);return s.length%2?s[m]:Math.round((s[m-1]+s[m])/2);};
+  const verdict={ "greenhouse":{t:"healthy",fg:"var(--green)",bg:"var(--green-soft)"},
+    "lever":{t:"flagged — excluded",fg:"var(--red)",bg:"var(--red-soft)"},
+    "seed-job-board":{t:"fixture",fg:"var(--ink-3)",bg:"var(--surface-2)"} };
+  sourceHealth.innerHTML=Object.entries(bySrc).map(([src,days])=>{
+    const v=verdict[src]||{t:"—",fg:"var(--ink-3)",bg:"var(--surface-2)"};
+    return `
+    <div class="flex items-center gap-3">
+      <div class="flex-1 min-w-0">
+        <div class="text-[13px] font-bold">${src}</div>
+        <div class="text-[11px] mono" style="color:var(--ink-3)">${days.length} opp${days.length>1?'s':''} · median ${median(days).toLocaleString()}d</div>
+      </div>
+      <span class="inline-flex items-center h-6 px-2.5 rounded-md text-[11px] font-bold" style="background:${v.bg};color:${v.fg}">${v.t}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ------------------------------ modal ------------------------------ */
+function openPayload(i){
+  modalCo.textContent=OPPS[i].company;
+  modalBody.textContent=JSON.stringify(OPPS[i].raw_payload,null,2);
+  modal.classList.remove('hidden'); modal.classList.add('flex');
+}
+function closeModal(){ modal.classList.add('hidden'); modal.classList.remove('flex'); }
+modalClose.onclick=closeModal;
+modal.onclick=e=>{if(e.target.id==='modal')closeModal();};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+
+/* ------------------------------ tabs ------------------------------ */
+function setTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.dataset.active=(t.dataset.tab===name));
+  document.getElementById('view-opps').classList.toggle('hidden',name!=='opps');
+  document.getElementById('view-signals').classList.toggle('hidden',name!=='signals');
+  window.scrollTo({top:0});
+}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>setTab(t.dataset.tab));
+
+/* ------------------------------ theme ------------------------------ */
+function setTheme(dark){
+  const el=document.documentElement;
+  el.classList.toggle('dark',dark); el.classList.toggle('light',!dark);
+  themeIcon.innerHTML=dark?I.sun:I.moon; themeLbl.textContent=dark?'Light':'Dark';
+}
+themeBtn.onclick=()=>setTheme(!document.documentElement.classList.contains('dark'));
+setTheme(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+/* ------------------------------ init ------------------------------ */
+document.getElementById('limIcon').innerHTML=I.warn;
+renderKpis(); renderCards();
+renderHero(); renderSignals(); renderFamily(); renderSourceHealth();
+</script>
+</body>
+</html>
