@@ -28,6 +28,11 @@ if (typeof jsdom !== "undefined") {
   });
 }
 
+// jsdom has no canvas implementation and logs "Not implemented" on every
+// getContext call. LoginBackdrop (decorative) treats a null context as "skip
+// drawing", so stub it to null to keep test output clean.
+HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext;
+
 // testing-library's auto-cleanup only self-registers when it detects a
 // global afterEach (vitest doesn't inject one unless test.globals is set),
 // so without this, each render() leaves its DOM in place for the next test

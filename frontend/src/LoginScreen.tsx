@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { storeToken, storeRole, storeEmail, storeDisplayName } from "./auth";
+import { LoginBackdrop } from "./components/LoginBackdrop";
 
 interface LoginScreenProps {
   onSuccess: (token: string) => void;
@@ -51,7 +52,9 @@ export function LoginScreen({ onSuccess, onSwitchToRegister }: LoginScreenProps)
 
   return (
     <div className="auth-shell">
-      <div className="auth-layout">
+      <LoginBackdrop />
+      {/* position + zIndex lift the content above the fixed backdrop canvas */}
+      <div className="auth-layout" style={{ position: "relative", zIndex: 1 }}>
         <div className="auth-intro">
           <span className="auth-intro-eyebrow">Staffing demand intelligence</span>
           <h1>Know which roles need your attention.</h1>

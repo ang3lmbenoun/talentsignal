@@ -158,7 +158,19 @@ export function App() {
     // badge rather than inside the card itself.
     return (
       <>
-        <div className="auth-health-badge">{healthPill}</div>
+        {/* On the login view the fixed corner badge collides with the headline on
+            narrow screens, so it is visually hidden there (still in the DOM and
+            readable by assistive tech). Register keeps the normal badge. */}
+        <div
+          className="auth-health-badge"
+          style={
+            authView === "login"
+              ? { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" }
+              : undefined
+          }
+        >
+          {healthPill}
+        </div>
         {authView === "login" ? (
           <LoginScreen onSuccess={setToken} onSwitchToRegister={() => setAuthView("register")} />
         ) : (
