@@ -10,15 +10,12 @@ roles, and drafts outreach packages. External providers stay mocked behind adapt
 
 ## Where the code lives
 
-**https://github.com/lious19/talentsignal** — private repo, `main` branch. Ask Megan for
-access.
+**https://github.com/ang3lmbenoun/talentsignal** — `main` branch.
 
-## Where the deployed demo lives
+## Where the demo lives
 
-**https://talentsignal.onrender.com** — Render free tier. It cold-starts after ~15 minutes
-idle: `curl` `/health` once and give it a few seconds before demoing live. Data is synthetic
-seed data only, reseeded via `npm run seed:demo` against the live database — never real client
-data.
+The project runs **locally only**; there is no hosted demo. See the README's "Run it locally"
+section. Data is synthetic seed data only, loaded with `npm run seed:demo`, never real client data.
 
 ## Where the decisions live
 
@@ -27,13 +24,13 @@ thresholds, segment definitions, security/deploy tradeoffs), each stating what i
 what would make it wrong. 37 decisions on file as of S-20 (numbering has small intentional gaps
 — a few reserved numbers were superseded or never needed once a gate passed clean).
 `06_decisions/README.md` is the template and the open-items index — check it for anything still
-awaiting Ali's answer before building on top of it.
+awaiting the approver's answer before building on top of it.
 
 ## Where the story specs live
 
 `00_scope/stories/` — per-story Gherkin acceptance criteria: `S-01.md` through `S-19.md`, plus
 `HF-1.md`. No `S-20.md`, `HF-2`, or `HF-3` story file exists — those releases were built
-directly from Ali's meeting notes and Basecamp comments, captured instead in the relevant
+directly from check-in notes and ticket comments, captured instead in the relevant
 `06_decisions/` entries. `00_scope/scope.md` is the overall captured spec — read that first for
 *what* the platform does.
 
@@ -42,20 +39,11 @@ directly from Ali's meeting notes and Basecamp comments, captured instead in the
 `05_presentations/` — per-story build summaries and demo evidence (screenshots, load-test
 results), written for the weekly class demo.
 
-## The six Basecamp Project Docs
+## The project docs
 
-Inside the "TalentSignal Revenue Engine – Project Docs" folder in Basecamp's Docs & Files:
-
-- Docs Index & Agent Onboarding
-- Requirements
-- Architecture & Agent Map
-- Trust (TBI) Primer
-- Build Guide (per-release walkthrough)
-- Traceability Matrix
-
-No individual doc links are captured anywhere in this repo — linked from the S-20 to-do in the
-BUILD list. The parent Basecamp project (todolist the spec was captured from) is:
-`https://app.basecamp.com/3945211/buckets/24865175/todolists/10116038052`.
+The spec was captured from a private project-management workspace (an index, requirements, an
+architecture and agent map, a trust primer, a build guide and a traceability matrix). Those
+documents and their links are not part of this repo; `00_scope/` holds the captured result.
 
 ## Non-negotiables
 
@@ -74,5 +62,6 @@ shortcut:
 
 ## Who to ask
 
-- **Ali Muwwakkil** — approvals, business-logic decisions, phase gates.
-- **Megan** — build owner.
+Business-logic decisions and phase approvals belong to the project's approver; the build owner
+is the repository owner. Open a decision-log entry (`06_decisions/`) for anything that is a
+business choice.
